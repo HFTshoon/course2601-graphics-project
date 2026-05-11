@@ -21,7 +21,6 @@ CMakeFiles/main.dir/src/main.cpp.o: \
  /usr/include/x86_64-linux-gnu/bits/stdint-uintn.h \
  /usr/include/inttypes.h \
  /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/../../includes/GLFW/glfw3.h \
- /usr/include/GL/gl.h \
  /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/../../includes/glm/glm.hpp \
  /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/../../includes/glm/detail/_fixes.hpp \
  /usr/include/c++/11/cmath \
@@ -530,4 +529,8 @@ CMakeFiles/main.dir/src/main.cpp.o: \
  /usr/include/c++/11/bits/erase_if.h \
  /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/scene.h \
  /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/math_utils.h \
- /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/light.h
+ /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/light.h \
+ /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/imgui.h \
+ /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/imconfig.h \
+ /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/imgui_impl_glfw.h \
+ /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/imgui_impl_opengl3.h

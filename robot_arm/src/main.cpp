@@ -22,6 +22,9 @@
 #include <algorithm>
 #include <array>
 #include <limits>
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
@@ -32,8 +35,8 @@ bool isWindowed = true;
 bool isKeyboardDone[1024] = { 0 };
 
 // setting
-const unsigned int SCR_WIDTH = 800;
-const unsigned int SCR_HEIGHT = 600;
+const unsigned int SCR_WIDTH = 1600;
+const unsigned int SCR_HEIGHT = 900;
 const unsigned int SHADOW_WIDTH = 2048;
 const unsigned int SHADOW_HEIGHT = 2048;
 const float planeSize = 15.f;
@@ -41,11 +44,13 @@ const unsigned int CSM_CASCADE_COUNT = 3;
 const float CAMERA_NEAR_PLANE = 0.1f;
 const float CAMERA_FAR_PLANE = 100.0f;
 
-// camera
-Camera camera(glm::vec3(0.0f, 0.5f, 3.0f));
+// camera — isometric-like: left-front-top angle looking at robot arm
+Camera camera(glm::vec3(-2.38529f, 0.853243f, 2.26314f), glm::vec3(0.0f, 1.0f, 0.0f), -39.1f, -13.2f);
+// Camera camera(glm::vec3(-2.5f, 2.0f, 3.5f), glm::vec3(0.0f, 1.0f, 0.0f), -45.0f, -23.0f);
 float lastX = SCR_WIDTH / 2.0f;
 float lastY = SCR_HEIGHT / 2.0f;
 bool firstMouse = true;
+bool imguiMode = true;  // start with mouse cursor visible for ImGui
 
 // timing
 float deltaTime = 0.0f;	// time between current frame and last frame
@@ -160,8 +165,16 @@ int main()
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
 
-    // tell GLFW to capture our mouse
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    // Mouse cursor: start visible so ImGui is immediately usable (Tab toggles camera mode)
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+
+    // ImGui setup
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    ImGui::StyleColorsDark();
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplOpenGL3_Init("#version 330");
 
     // glad: load all OpenGL function pointers
     // ---------------------------------------
@@ -211,6 +224,8 @@ int main()
     Model pandaLink5Model(pandaLinkPaths[5]);
     Model pandaLink6Model(pandaLinkPaths[6]);
     Model pandaLink7Model(pandaLinkPaths[7]);
+    Model pandaHandModel("../resources/robot_arm/franka_description/meshes/visual/hand.dae");
+    Model pandaFingerModel("../resources/robot_arm/franka_description/meshes/visual/finger.dae");
 
     Model* pandaLinks[] = {
         &pandaLink0Model,
@@ -222,12 +237,6 @@ int main()
         &pandaLink6Model,
         &pandaLink7Model
     };
-
-    for (int i = 0; i < 8; ++i) {
-        std::cout << "[DEBUG] link" << i
-                  << " vertices=" << pandaLinks[i]->mesh.vertices.size()
-                  << ", indices=" << pandaLinks[i]->mesh.indices.size() << std::endl;
-    }
 
     auto urdfBasis = []() {
         glm::mat4 basis(1.0f);
@@ -258,34 +267,95 @@ int main()
         glm::vec3 xyz;
         glm::vec3 rpy;
         glm::vec3 axis;
+        float lower;       // joint limit lower (rad)
+        float upper;       // joint limit upper (rad)
         float initialAngle;
     };
 
+    // Joint specs from panda_arm.xacro
     const PandaJointSpec pandaJoints[] = {
-        { glm::vec3(0.0f, 0.0f, 0.333f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), 0.0f },
-        { glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(-glm::half_pi<float>(), 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), -glm::quarter_pi<float>() },
-        { glm::vec3(0.0f, -0.316f, 0.0f), glm::vec3(glm::half_pi<float>(), 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), 0.0f },
-        { glm::vec3(0.0825f, 0.0f, 0.0f), glm::vec3(glm::half_pi<float>(), 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), -3.0f * glm::quarter_pi<float>() },
-        { glm::vec3(-0.0825f, 0.384f, 0.0f), glm::vec3(-glm::half_pi<float>(), 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), 0.0f },
-        { glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(glm::half_pi<float>(), 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::half_pi<float>() },
-        { glm::vec3(0.088f, 0.0f, 0.0f), glm::vec3(glm::half_pi<float>(), 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), glm::quarter_pi<float>() }
+        // joint1: xyz=(0,0,0.333), rpy=(0,0,0), axis=(0,0,1), lower=-2.8973, upper=2.8973
+        { glm::vec3(0.0f, 0.0f, 0.333f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), -2.8973f, 2.8973f, 0.0f },
+        // joint2: xyz=(0,0,0), rpy=(-pi/2,0,0), axis=(0,0,1), lower=-1.7628, upper=1.7628
+        { glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(-glm::half_pi<float>(), 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), -1.7628f, 1.7628f, -glm::quarter_pi<float>() },
+        // joint3: xyz=(0,-0.316,0), rpy=(pi/2,0,0), axis=(0,0,1), lower=-2.8973, upper=2.8973
+        { glm::vec3(0.0f, -0.316f, 0.0f), glm::vec3(glm::half_pi<float>(), 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), -2.8973f, 2.8973f, 0.0f },
+        // joint4: xyz=(0.0825,0,0), rpy=(pi/2,0,0), axis=(0,0,1), lower=-3.0718, upper=-0.0698
+        { glm::vec3(0.0825f, 0.0f, 0.0f), glm::vec3(glm::half_pi<float>(), 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), -3.0718f, -0.0698f, -3.0f * glm::quarter_pi<float>() },
+        // joint5: xyz=(-0.0825,0.384,0), rpy=(-pi/2,0,0), axis=(0,0,1), lower=-2.8973, upper=2.8973
+        { glm::vec3(-0.0825f, 0.384f, 0.0f), glm::vec3(-glm::half_pi<float>(), 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), -2.8973f, 2.8973f, 0.0f },
+        // joint6: xyz=(0,0,0), rpy=(pi/2,0,0), axis=(0,0,1), lower=-0.0175, upper=3.7525
+        { glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(glm::half_pi<float>(), 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), -0.0175f, 3.7525f, glm::half_pi<float>() },
+        // joint7: xyz=(0.088,0,0), rpy=(pi/2,0,0), axis=(0,0,1), lower=-2.8973, upper=2.8973
+        { glm::vec3(0.088f, 0.0f, 0.0f), glm::vec3(glm::half_pi<float>(), 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), -2.8973f, 2.8973f, glm::quarter_pi<float>() }
+    };
+
+    // Gripper opening (finger_joint1 = finger_joint2, prismatic, range 0..0.04)
+    float gripperOpening = 0.02f;  // half open by default
+
+    // Dynamic joint angles (start at initial positions)
+    float jointAngles[7] = {
+        pandaJoints[0].initialAngle,
+        pandaJoints[1].initialAngle,
+        pandaJoints[2].initialAngle,
+        pandaJoints[3].initialAngle,
+        pandaJoints[4].initialAngle,
+        pandaJoints[5].initialAngle,
+        pandaJoints[6].initialAngle,
     };
 
     glm::mat4 pandaBaseWorld = glm::mat4(1.0f);
     pandaBaseWorld = glm::translate(pandaBaseWorld, glm::vec3(0.0f, -0.5f, 1.0f));
     pandaBaseWorld = glm::rotate(pandaBaseWorld, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    pandaBaseWorld = glm::scale(pandaBaseWorld, glm::vec3(8.0f));
-    scene.addEntity(new Entity(&pandaLink0Model, pandaBaseWorld));
+    pandaBaseWorld = glm::scale(pandaBaseWorld, glm::vec3(2.0f));
 
-    glm::mat4 currentLinkWorld = pandaBaseWorld;
-    for (int jointIndex = 0; jointIndex < 7; ++jointIndex) {
-        glm::mat4 jointOrigin = urdfOriginToRender(pandaJoints[jointIndex].xyz, pandaJoints[jointIndex].rpy);
-        glm::vec3 jointAxis = glm::normalize(urdfVecToRender(pandaJoints[jointIndex].axis));
-        glm::mat4 jointMotion = glm::rotate(glm::mat4(1.0f), pandaJoints[jointIndex].initialAngle, jointAxis);
+    // Entities for robot arm links (rebuilt each frame)
+    Entity* pandaLinkEntities[8];
+    pandaLinkEntities[0] = new Entity(&pandaLink0Model, pandaBaseWorld);
+    for (int i = 1; i < 8; ++i)
+        pandaLinkEntities[i] = new Entity(pandaLinks[i], glm::mat4(1.0f));
 
-        currentLinkWorld = currentLinkWorld * jointOrigin * jointMotion;
-        scene.addEntity(new Entity(pandaLinks[jointIndex + 1], currentLinkWorld));
-    }
+    // Hand and finger entities
+    Entity* handEntity      = new Entity(&pandaHandModel,   glm::mat4(1.0f));
+    Entity* leftFingerEntity  = new Entity(&pandaFingerModel, glm::mat4(1.0f));
+    Entity* rightFingerEntity = new Entity(&pandaFingerModel, glm::mat4(1.0f));
+
+    scene.addEntity(pandaLinkEntities[0]);
+    for (int i = 1; i < 8; ++i)
+        scene.addEntity(pandaLinkEntities[i]);
+    scene.addEntity(handEntity);
+    scene.addEntity(leftFingerEntity);
+    scene.addEntity(rightFingerEntity);
+
+    // Helper: rebuild link transforms from current joint angles
+    auto rebuildPandaTransforms = [&]() {
+        glm::mat4 cur = pandaBaseWorld;
+        for (int j = 0; j < 7; ++j) {
+            glm::mat4 origin = urdfOriginToRender(pandaJoints[j].xyz, pandaJoints[j].rpy);
+            glm::vec3 axis = glm::normalize(urdfVecToRender(pandaJoints[j].axis));
+            glm::mat4 motion = glm::rotate(glm::mat4(1.0f), jointAngles[j], axis);
+            cur = cur * origin * motion;
+            pandaLinkEntities[j + 1]->modelMatrix = cur;
+        }
+        // joint8 (fixed): xyz=(0,0,0.107), rpy=(0,0,0)
+        glm::mat4 joint8 = urdfOriginToRender(glm::vec3(0.0f, 0.0f, 0.107f), glm::vec3(0.0f));
+        // hand_joint (fixed): xyz=(0,0,0), rpy=(0,0,-pi/4)
+        glm::mat4 handJoint = urdfOriginToRender(glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, -glm::quarter_pi<float>()));
+        glm::mat4 handWorld = cur * joint8 * handJoint;
+        handEntity->modelMatrix = handWorld;
+
+        // finger_joint1/2: xyz=(0,0,0.0584), prismatic along ±y
+        glm::mat4 fingerBase = urdfOriginToRender(glm::vec3(0.0f, 0.0f, 0.0584f), glm::vec3(0.0f));
+        glm::vec3 fingerAxisL = glm::normalize(urdfVecToRender(glm::vec3(0.0f, 1.0f, 0.0f)));
+        glm::vec3 fingerAxisR = glm::normalize(urdfVecToRender(glm::vec3(0.0f, -1.0f, 0.0f)));
+        glm::mat4 leftFingerMotion  = glm::translate(glm::mat4(1.0f),  fingerAxisL * gripperOpening);
+        glm::mat4 rightFingerMotion = glm::translate(glm::mat4(1.0f),  fingerAxisR * gripperOpening);
+        // rightfinger visual is rotated pi around Z in URDF
+        glm::mat4 rightFingerVisual = urdfOriginToRender(glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, glm::pi<float>()));
+        leftFingerEntity->modelMatrix  = handWorld * fingerBase * leftFingerMotion;
+        rightFingerEntity->modelMatrix = handWorld * fingerBase * rightFingerMotion * rightFingerVisual;
+    };
+    rebuildPandaTransforms();
 
     // define depth textures for cascaded shadow mapping
     std::array<CascadeShadowMap, CSM_CASCADE_COUNT> cascadeShadowMaps = {
@@ -335,6 +405,47 @@ int main()
 
         // input
         processInput(window, &sun);
+
+        // ImGui frame
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+
+        // Joint control window
+        ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Once);
+        ImGui::SetNextWindowSize(ImVec2(500, 290), ImGuiCond_Once);
+        ImGui::Begin("Franka Panda Joint Control");
+        bool jointChanged = false;
+        for (int j = 0; j < 7; ++j) {
+            char label[32];
+            snprintf(label, sizeof(label), "Joint %d [%.2f, %.2f]", j + 1,
+                     pandaJoints[j].lower, pandaJoints[j].upper);
+            if (ImGui::SliderFloat(label, &jointAngles[j], pandaJoints[j].lower, pandaJoints[j].upper))
+                jointChanged = true;
+        }
+        if (ImGui::SliderFloat("Gripper [0.00, 0.04]", &gripperOpening, 0.0f, 0.04f))
+            jointChanged = true;
+        if (ImGui::Button("Reset")) {
+            for (int j = 0; j < 7; ++j)
+                jointAngles[j] = pandaJoints[j].initialAngle;
+            gripperOpening = 0.02f;
+            jointChanged = true;
+        }
+        ImGui::End();
+
+        if (jointChanged)
+            rebuildPandaTransforms();
+
+        // Tab: toggle between camera mode and ImGui mode
+        if (glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS && !isKeyboardDone[GLFW_KEY_TAB]) {
+            imguiMode = !imguiMode;
+            glfwSetInputMode(window, GLFW_CURSOR, imguiMode ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
+            firstMouse = true;
+            isKeyboardDone[GLFW_KEY_TAB] = true;
+        }
+        if (glfwGetKey(window, GLFW_KEY_TAB) == GLFW_RELEASE)
+            isKeyboardDone[GLFW_KEY_TAB] = false;
+
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         
         // TODO : 
@@ -463,11 +574,19 @@ int main()
         glBindVertexArray(0);
         glDepthFunc(GL_LESS);
 
+        // Render ImGui
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
         // -------------------------------------------------------------------------------
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
+
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
 
     // optional: de-allocate all resources once they've outlived their purpose:
     // ------------------------------------------------------------------------
@@ -547,6 +666,18 @@ void processInput(GLFWwindow* window, DirectionalLight* sun)
         isKeyboardDone[GLFW_KEY_3] = false;
     }
 
+    if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS && !isKeyboardDone[GLFW_KEY_P]) {
+        std::cout << "Camera camera(glm::vec3("
+                  << camera.Position.x << "f, "
+                  << camera.Position.y << "f, "
+                  << camera.Position.z << "f), glm::vec3(0.0f, 1.0f, 0.0f), "
+                  << camera.Yaw << "f, "
+                  << camera.Pitch << "f);" << std::endl;
+        isKeyboardDone[GLFW_KEY_P] = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_P) == GLFW_RELEASE)
+        isKeyboardDone[GLFW_KEY_P] = false;
+
     if (glfwGetKey(window, GLFW_KEY_4) == GLFW_PRESS && !isKeyboardDone[GLFW_KEY_4]) {
         useCSM = !useCSM;
         std::cout << "Shadow Mode: " << (useCSM ? "CSM (3 cascades)" : "Single shadow map") << std::endl;
@@ -571,6 +702,13 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 // -------------------------------------------------------
 void mouse_callback(GLFWwindow* window, double xpos, double ypos)
 {
+    if (imguiMode) {
+        // In ImGui mode: don't rotate camera
+        lastX = xpos;
+        lastY = ypos;
+        return;
+    }
+
     if (firstMouse)
     {
         lastX = xpos;

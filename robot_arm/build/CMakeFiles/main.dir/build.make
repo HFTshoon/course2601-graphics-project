@@ -27,6 +27,9 @@
 
 .SUFFIXES: .hpux_make_needs_suffix_list
 
+# Produce verbose output by default.
+VERBOSE = 1
+
 # Command-line flag to silence nested $(MAKE).
 $(VERBOSE)MAKESILENT = -s
 
@@ -69,10 +72,94 @@ include CMakeFiles/main.dir/progress.make
 # Include the compile flags for this target's objects.
 include CMakeFiles/main.dir/flags.make
 
+CMakeFiles/main.dir/src/imgui.cpp.o: CMakeFiles/main.dir/flags.make
+CMakeFiles/main.dir/src/imgui.cpp.o: ../src/imgui.cpp
+CMakeFiles/main.dir/src/imgui.cpp.o: CMakeFiles/main.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CXX object CMakeFiles/main.dir/src/imgui.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/main.dir/src/imgui.cpp.o -MF CMakeFiles/main.dir/src/imgui.cpp.o.d -o CMakeFiles/main.dir/src/imgui.cpp.o -c /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/imgui.cpp
+
+CMakeFiles/main.dir/src/imgui.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/main.dir/src/imgui.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/imgui.cpp > CMakeFiles/main.dir/src/imgui.cpp.i
+
+CMakeFiles/main.dir/src/imgui.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/main.dir/src/imgui.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/imgui.cpp -o CMakeFiles/main.dir/src/imgui.cpp.s
+
+CMakeFiles/main.dir/src/imgui_draw.cpp.o: CMakeFiles/main.dir/flags.make
+CMakeFiles/main.dir/src/imgui_draw.cpp.o: ../src/imgui_draw.cpp
+CMakeFiles/main.dir/src/imgui_draw.cpp.o: CMakeFiles/main.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object CMakeFiles/main.dir/src/imgui_draw.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/main.dir/src/imgui_draw.cpp.o -MF CMakeFiles/main.dir/src/imgui_draw.cpp.o.d -o CMakeFiles/main.dir/src/imgui_draw.cpp.o -c /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/imgui_draw.cpp
+
+CMakeFiles/main.dir/src/imgui_draw.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/main.dir/src/imgui_draw.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/imgui_draw.cpp > CMakeFiles/main.dir/src/imgui_draw.cpp.i
+
+CMakeFiles/main.dir/src/imgui_draw.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/main.dir/src/imgui_draw.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/imgui_draw.cpp -o CMakeFiles/main.dir/src/imgui_draw.cpp.s
+
+CMakeFiles/main.dir/src/imgui_impl_glfw.cpp.o: CMakeFiles/main.dir/flags.make
+CMakeFiles/main.dir/src/imgui_impl_glfw.cpp.o: ../src/imgui_impl_glfw.cpp
+CMakeFiles/main.dir/src/imgui_impl_glfw.cpp.o: CMakeFiles/main.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object CMakeFiles/main.dir/src/imgui_impl_glfw.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/main.dir/src/imgui_impl_glfw.cpp.o -MF CMakeFiles/main.dir/src/imgui_impl_glfw.cpp.o.d -o CMakeFiles/main.dir/src/imgui_impl_glfw.cpp.o -c /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/imgui_impl_glfw.cpp
+
+CMakeFiles/main.dir/src/imgui_impl_glfw.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/main.dir/src/imgui_impl_glfw.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/imgui_impl_glfw.cpp > CMakeFiles/main.dir/src/imgui_impl_glfw.cpp.i
+
+CMakeFiles/main.dir/src/imgui_impl_glfw.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/main.dir/src/imgui_impl_glfw.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/imgui_impl_glfw.cpp -o CMakeFiles/main.dir/src/imgui_impl_glfw.cpp.s
+
+CMakeFiles/main.dir/src/imgui_impl_opengl3.cpp.o: CMakeFiles/main.dir/flags.make
+CMakeFiles/main.dir/src/imgui_impl_opengl3.cpp.o: ../src/imgui_impl_opengl3.cpp
+CMakeFiles/main.dir/src/imgui_impl_opengl3.cpp.o: CMakeFiles/main.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CXX object CMakeFiles/main.dir/src/imgui_impl_opengl3.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/main.dir/src/imgui_impl_opengl3.cpp.o -MF CMakeFiles/main.dir/src/imgui_impl_opengl3.cpp.o.d -o CMakeFiles/main.dir/src/imgui_impl_opengl3.cpp.o -c /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/imgui_impl_opengl3.cpp
+
+CMakeFiles/main.dir/src/imgui_impl_opengl3.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/main.dir/src/imgui_impl_opengl3.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/imgui_impl_opengl3.cpp > CMakeFiles/main.dir/src/imgui_impl_opengl3.cpp.i
+
+CMakeFiles/main.dir/src/imgui_impl_opengl3.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/main.dir/src/imgui_impl_opengl3.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/imgui_impl_opengl3.cpp -o CMakeFiles/main.dir/src/imgui_impl_opengl3.cpp.s
+
+CMakeFiles/main.dir/src/imgui_tables.cpp.o: CMakeFiles/main.dir/flags.make
+CMakeFiles/main.dir/src/imgui_tables.cpp.o: ../src/imgui_tables.cpp
+CMakeFiles/main.dir/src/imgui_tables.cpp.o: CMakeFiles/main.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Building CXX object CMakeFiles/main.dir/src/imgui_tables.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/main.dir/src/imgui_tables.cpp.o -MF CMakeFiles/main.dir/src/imgui_tables.cpp.o.d -o CMakeFiles/main.dir/src/imgui_tables.cpp.o -c /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/imgui_tables.cpp
+
+CMakeFiles/main.dir/src/imgui_tables.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/main.dir/src/imgui_tables.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/imgui_tables.cpp > CMakeFiles/main.dir/src/imgui_tables.cpp.i
+
+CMakeFiles/main.dir/src/imgui_tables.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/main.dir/src/imgui_tables.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/imgui_tables.cpp -o CMakeFiles/main.dir/src/imgui_tables.cpp.s
+
+CMakeFiles/main.dir/src/imgui_widgets.cpp.o: CMakeFiles/main.dir/flags.make
+CMakeFiles/main.dir/src/imgui_widgets.cpp.o: ../src/imgui_widgets.cpp
+CMakeFiles/main.dir/src/imgui_widgets.cpp.o: CMakeFiles/main.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_6) "Building CXX object CMakeFiles/main.dir/src/imgui_widgets.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/main.dir/src/imgui_widgets.cpp.o -MF CMakeFiles/main.dir/src/imgui_widgets.cpp.o.d -o CMakeFiles/main.dir/src/imgui_widgets.cpp.o -c /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/imgui_widgets.cpp
+
+CMakeFiles/main.dir/src/imgui_widgets.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/main.dir/src/imgui_widgets.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/imgui_widgets.cpp > CMakeFiles/main.dir/src/imgui_widgets.cpp.i
+
+CMakeFiles/main.dir/src/imgui_widgets.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/main.dir/src/imgui_widgets.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/imgui_widgets.cpp -o CMakeFiles/main.dir/src/imgui_widgets.cpp.s
+
 CMakeFiles/main.dir/src/main.cpp.o: CMakeFiles/main.dir/flags.make
 CMakeFiles/main.dir/src/main.cpp.o: ../src/main.cpp
 CMakeFiles/main.dir/src/main.cpp.o: CMakeFiles/main.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CXX object CMakeFiles/main.dir/src/main.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_7) "Building CXX object CMakeFiles/main.dir/src/main.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/main.dir/src/main.cpp.o -MF CMakeFiles/main.dir/src/main.cpp.o.d -o CMakeFiles/main.dir/src/main.cpp.o -c /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/src/main.cpp
 
 CMakeFiles/main.dir/src/main.cpp.i: cmake_force
@@ -86,7 +173,7 @@ CMakeFiles/main.dir/src/main.cpp.s: cmake_force
 CMakeFiles/main.dir/media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/glad.c.o: CMakeFiles/main.dir/flags.make
 CMakeFiles/main.dir/media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/glad.c.o: /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/glad.c
 CMakeFiles/main.dir/media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/glad.c.o: CMakeFiles/main.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building C object CMakeFiles/main.dir/media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/glad.c.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_8) "Building C object CMakeFiles/main.dir/media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/glad.c.o"
 	/usr/bin/cc $(C_DEFINES) $(C_INCLUDES) $(C_FLAGS) -MD -MT CMakeFiles/main.dir/media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/glad.c.o -MF CMakeFiles/main.dir/media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/glad.c.o.d -o CMakeFiles/main.dir/media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/glad.c.o -c /media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/glad.c
 
 CMakeFiles/main.dir/media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/glad.c.i: cmake_force
@@ -99,17 +186,29 @@ CMakeFiles/main.dir/media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/g
 
 # Object files for target main
 main_OBJECTS = \
+"CMakeFiles/main.dir/src/imgui.cpp.o" \
+"CMakeFiles/main.dir/src/imgui_draw.cpp.o" \
+"CMakeFiles/main.dir/src/imgui_impl_glfw.cpp.o" \
+"CMakeFiles/main.dir/src/imgui_impl_opengl3.cpp.o" \
+"CMakeFiles/main.dir/src/imgui_tables.cpp.o" \
+"CMakeFiles/main.dir/src/imgui_widgets.cpp.o" \
 "CMakeFiles/main.dir/src/main.cpp.o" \
 "CMakeFiles/main.dir/media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/glad.c.o"
 
 # External object files for target main
 main_EXTERNAL_OBJECTS =
 
+main: CMakeFiles/main.dir/src/imgui.cpp.o
+main: CMakeFiles/main.dir/src/imgui_draw.cpp.o
+main: CMakeFiles/main.dir/src/imgui_impl_glfw.cpp.o
+main: CMakeFiles/main.dir/src/imgui_impl_opengl3.cpp.o
+main: CMakeFiles/main.dir/src/imgui_tables.cpp.o
+main: CMakeFiles/main.dir/src/imgui_widgets.cpp.o
 main: CMakeFiles/main.dir/src/main.cpp.o
 main: CMakeFiles/main.dir/media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/glad.c.o
 main: CMakeFiles/main.dir/build.make
 main: CMakeFiles/main.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Linking CXX executable main"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/media/shoon/DISK1/seunghoonjeong/2_course/01_2601_graphics/graphics_programming_2026/project/robot_arm/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_9) "Linking CXX executable main"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/main.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.
