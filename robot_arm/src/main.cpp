@@ -21,6 +21,9 @@
 #include "light.h"
 #include "robot_kinematics.h"
 #include "ik_solver.h"
+#include "trajectory_tracker.h"
+#include "waypoint.h"
+#include "handwriting_path_generator.h"
 #include <algorithm>
 #include <array>
 #include <limits>
@@ -271,6 +274,27 @@ int main()
     IKSolver ikSolver;
     bool enableIK = false;
     glm::vec3 ikTarget = robotKinematics.getEndEffectorPosition();
+    bool enableWaypointPlayback = false;
+    const glm::vec3 initialEndEffectorPosition = robotKinematics.getEndEffectorPosition();
+    std::vector<Waypoint> testWaypoints;
+    testWaypoints.push_back(Waypoint(initialEndEffectorPosition, false));
+    testWaypoints.push_back(Waypoint(initialEndEffectorPosition + glm::vec3(0.10f, 0.00f, 0.00f), false));
+    testWaypoints.push_back(Waypoint(initialEndEffectorPosition + glm::vec3(0.10f, -0.06f, 0.05f), true));
+    testWaypoints.push_back(Waypoint(initialEndEffectorPosition + glm::vec3(-0.02f, -0.06f, 0.08f), true));
+    testWaypoints.push_back(Waypoint(initialEndEffectorPosition + glm::vec3(-0.02f, 0.04f, 0.08f), false));
+    HandwritingPathGenerator handwritingGenerator;
+    HandwritingPathGenerator::Options handwritingOptions;
+    handwritingOptions.origin = initialEndEffectorPosition;
+    handwritingOptions.scale = 0.15f;
+    handwritingOptions.zDraw = 0.0f;
+    handwritingOptions.zTravel = 0.05f;
+    handwritingOptions.sampleSpacing = 0.01f;
+    int pathMode = 0;
+    const char* pathModeItems[] = { "Test Waypoints", "Lowercase a" };
+    std::vector<Waypoint> activeWaypoints = testWaypoints;
+    TrajectoryTracker trajectoryTracker;
+    trajectoryTracker.setWaypoints(activeWaypoints);
+    trajectoryTracker.reset(initialEndEffectorPosition);
     const std::array<float, RobotKinematics::DOF> initialJointAngles = robotKinematics.getJointAngles();
     const std::vector<glm::mat4>& initialLinkTransforms = robotKinematics.getLinkWorldTransforms();
 
@@ -371,7 +395,7 @@ int main()
 
         // Joint control window
         ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Once);
-        ImGui::SetNextWindowSize(ImVec2(500, 560), ImGuiCond_Once);
+        ImGui::SetNextWindowSize(ImVec2(560, 860), ImGuiCond_Once);
         ImGui::Begin("Franka Panda Joint Control");
         bool jointChanged = false;
         for (int j = 0; j < RobotKinematics::DOF; ++j) {
@@ -406,7 +430,90 @@ int main()
             ikTarget = robotKinematics.getEndEffectorPosition();
         }
 
-        if (enableIK) {
+        ImGui::Separator();
+        if (ImGui::Combo("Path Mode", &pathMode, pathModeItems, 2)) {
+            if (pathMode == 0) {
+                activeWaypoints = testWaypoints;
+            } else {
+                handwritingOptions.origin = robotKinematics.getEndEffectorPosition();
+                activeWaypoints = handwritingGenerator.generateLowercaseA(handwritingOptions);
+            }
+            trajectoryTracker.setWaypoints(activeWaypoints);
+            trajectoryTracker.reset(robotKinematics.getEndEffectorPosition());
+            enableWaypointPlayback = false;
+        }
+        if (ImGui::SliderFloat("Glyph Scale", &handwritingOptions.scale, 0.05f, 0.30f)) {
+            if (pathMode == 1) {
+                activeWaypoints = handwritingGenerator.generateLowercaseA(handwritingOptions);
+                trajectoryTracker.setWaypoints(activeWaypoints);
+                trajectoryTracker.reset(robotKinematics.getEndEffectorPosition());
+                enableWaypointPlayback = false;
+            }
+        }
+        if (ImGui::SliderFloat("Sample Spacing", &handwritingOptions.sampleSpacing, 0.005f, 0.030f)) {
+            if (pathMode == 1) {
+                activeWaypoints = handwritingGenerator.generateLowercaseA(handwritingOptions);
+                trajectoryTracker.setWaypoints(activeWaypoints);
+                trajectoryTracker.reset(robotKinematics.getEndEffectorPosition());
+                enableWaypointPlayback = false;
+            }
+        }
+        if (ImGui::SliderFloat("Travel Height", &handwritingOptions.zTravel, 0.01f, 0.15f)) {
+            if (pathMode == 1) {
+                activeWaypoints = handwritingGenerator.generateLowercaseA(handwritingOptions);
+                trajectoryTracker.setWaypoints(activeWaypoints);
+                trajectoryTracker.reset(robotKinematics.getEndEffectorPosition());
+                enableWaypointPlayback = false;
+            }
+        }
+        if (ImGui::Button("Generate / Reload Path")) {
+            if (pathMode == 0) {
+                activeWaypoints = testWaypoints;
+            } else {
+                handwritingOptions.origin = robotKinematics.getEndEffectorPosition();
+                activeWaypoints = handwritingGenerator.generateLowercaseA(handwritingOptions);
+            }
+            trajectoryTracker.setWaypoints(activeWaypoints);
+            trajectoryTracker.reset(robotKinematics.getEndEffectorPosition());
+            enableWaypointPlayback = false;
+        }
+        ImGui::Text("Current Path Mode: %s", pathModeItems[pathMode]);
+        ImGui::Text("Generated Waypoint Count: %d", trajectoryTracker.getWaypointCount());
+
+        ImGui::Separator();
+        if (ImGui::Checkbox("Enable Waypoint Playback", &enableWaypointPlayback)) {
+            if (enableWaypointPlayback) {
+                trajectoryTracker.play(robotKinematics.getEndEffectorPosition());
+            } else {
+                trajectoryTracker.pause();
+            }
+        }
+        if (ImGui::Button("Play")) {
+            enableWaypointPlayback = true;
+            trajectoryTracker.play(robotKinematics.getEndEffectorPosition());
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Pause")) {
+            trajectoryTracker.pause();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Reset Playback")) {
+            trajectoryTracker.reset(robotKinematics.getEndEffectorPosition());
+        }
+
+        float playbackSpeed = trajectoryTracker.getPlaybackSpeed();
+        if (ImGui::SliderFloat("Playback Speed", &playbackSpeed, 0.02f, 0.80f)) {
+            trajectoryTracker.setPlaybackSpeed(playbackSpeed);
+        }
+        float waypointThreshold = trajectoryTracker.getWaypointReachThreshold();
+        if (ImGui::SliderFloat("Waypoint Reach Threshold", &waypointThreshold, 0.005f, 0.10f)) {
+            trajectoryTracker.setWaypointReachThreshold(waypointThreshold);
+        }
+
+        if (enableWaypointPlayback) {
+            trajectoryTracker.update(dt, robotKinematics, ikSolver);
+            applyPandaTransforms();
+        } else if (enableIK) {
             ikSolver.solve(robotKinematics, ikTarget);
             applyPandaTransforms();
         }
@@ -423,6 +530,38 @@ int main()
         ImGui::Text("z: %.4f", ikTarget.z);
         ImGui::Text("IK Error Norm: %.6f", ikSolver.getLastErrorNorm());
         ImGui::Text("IK Iterations: %d", ikSolver.getLastIterationCount());
+
+        ImGui::Separator();
+        ImGui::Text("Waypoint Playback:");
+        ImGui::Text("Playing: %s", trajectoryTracker.isPlaying() ? "true" : "false");
+        ImGui::Text("Finished: %s", trajectoryTracker.isFinished() ? "true" : "false");
+        ImGui::Text(
+            "Current Waypoint Index: %d / %d",
+            trajectoryTracker.getCurrentWaypointIndex(),
+            trajectoryTracker.getWaypointCount()
+        );
+        if (trajectoryTracker.getWaypointCount() > 0
+            && trajectoryTracker.getCurrentWaypointIndex() < trajectoryTracker.getWaypointCount()) {
+            const Waypoint& currentWaypoint = trajectoryTracker.getCurrentWaypoint();
+            ImGui::Text("Current Waypoint Position:");
+            ImGui::Text("x: %.4f", currentWaypoint.position.x);
+            ImGui::Text("y: %.4f", currentWaypoint.position.y);
+            ImGui::Text("z: %.4f", currentWaypoint.position.z);
+            ImGui::Text("Current Waypoint penDown: %s", currentWaypoint.penDown ? "true" : "false");
+        } else {
+            ImGui::Text("Current Waypoint Position: finished");
+            ImGui::Text("Current Waypoint penDown: n/a");
+        }
+        const glm::vec3 interpolatedTargetPosition = trajectoryTracker.getInterpolatedTargetPosition();
+        ImGui::Text("Interpolated Target Position:");
+        ImGui::Text("x: %.4f", interpolatedTargetPosition.x);
+        ImGui::Text("y: %.4f", interpolatedTargetPosition.y);
+        ImGui::Text("z: %.4f", interpolatedTargetPosition.z);
+        ImGui::Text("Distance To Current Waypoint: %.6f", trajectoryTracker.getDistanceToCurrentWaypoint());
+        ImGui::Text(
+            "End Effector Distance To Waypoint: %.6f",
+            trajectoryTracker.getEndEffectorDistanceToCurrentWaypoint()
+        );
         ImGui::End();
 
         // Tab: toggle between camera mode and ImGui mode
