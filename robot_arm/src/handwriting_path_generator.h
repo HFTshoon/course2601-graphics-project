@@ -15,13 +15,15 @@ public:
         float zDraw;
         float zTravel;
         float sampleSpacing;
+        bool useSpline;
 
         Options()
             : origin(0.0f),
               scale(0.15f),
               zDraw(0.0f),
               zTravel(0.05f),
-              sampleSpacing(0.01f)
+              sampleSpacing(0.01f),
+              useSpline(true)
         {
         }
     };
@@ -33,7 +35,13 @@ private:
     static void appendStroke(
         const std::vector<glm::vec2>& localPoints,
         const Options& options,
-        std::vector<Waypoint>& waypoints
+        std::vector<Waypoint>& waypoints,
+        bool closed
+    );
+    static std::vector<glm::vec3> samplePolyline(
+        const std::vector<glm::vec3>& controlPoints,
+        float sampleSpacing,
+        bool closed
     );
 };
 

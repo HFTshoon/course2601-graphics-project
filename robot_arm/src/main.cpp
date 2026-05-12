@@ -289,6 +289,7 @@ int main()
     handwritingOptions.zDraw = 0.0f;
     handwritingOptions.zTravel = 0.05f;
     handwritingOptions.sampleSpacing = 0.01f;
+    handwritingOptions.useSpline = true;
     int pathMode = 0;
     const char* pathModeItems[] = { "Test Waypoints", "Lowercase a" };
     std::vector<Waypoint> activeWaypoints = testWaypoints;
@@ -442,6 +443,14 @@ int main()
             trajectoryTracker.reset(robotKinematics.getEndEffectorPosition());
             enableWaypointPlayback = false;
         }
+        if (ImGui::Checkbox("Use Spline", &handwritingOptions.useSpline)) {
+            if (pathMode == 1) {
+                activeWaypoints = handwritingGenerator.generateLowercaseA(handwritingOptions);
+                trajectoryTracker.setWaypoints(activeWaypoints);
+                trajectoryTracker.reset(robotKinematics.getEndEffectorPosition());
+                enableWaypointPlayback = false;
+            }
+        }
         if (ImGui::SliderFloat("Glyph Scale", &handwritingOptions.scale, 0.05f, 0.30f)) {
             if (pathMode == 1) {
                 activeWaypoints = handwritingGenerator.generateLowercaseA(handwritingOptions);
@@ -478,6 +487,7 @@ int main()
             enableWaypointPlayback = false;
         }
         ImGui::Text("Current Path Mode: %s", pathModeItems[pathMode]);
+        ImGui::Text("Use Spline: %s", handwritingOptions.useSpline ? "true" : "false");
         ImGui::Text("Generated Waypoint Count: %d", trajectoryTracker.getWaypointCount());
 
         ImGui::Separator();
