@@ -3,7 +3,8 @@ cmake_policy(VERSION 3.10)
 project("HW2" C CXX)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/build)
-set(PROJECT_ORIGIN "../../")
+set(PROJECT_ORIGIN "${CMAKE_SOURCE_DIR}/../..")
+get_filename_component(PROJECT_ORIGIN "${PROJECT_ORIGIN}" ABSOLUTE)
 
 file(GLOB SOURCE
     "src/*.h"
@@ -17,6 +18,7 @@ link_directories(${PROJECT_ORIGIN}/lib)
 
 if(WIN32)
   set(LIBS glfw3 opengl32 freetype assimp)
+  include_directories(${PROJECT_ORIGIN}/includes)
   file(COPY ${PROJECT_ORIGIN}/dlls/assimp-vc140-mt.dll
      DESTINATION ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
 endif(WIN32)
@@ -36,4 +38,7 @@ endif(UNIX)
 list(APPEND CMAKE_CXX_FLAGS "-std=c++11")
 add_executable(${NAME} ${SOURCE})
 target_link_libraries(${NAME} ${LIBS})
-include_directories(${PROJECT_ORIGIN}/includes)
+
+if(UNIX)
+  target_compile_options(${NAME} PRIVATE -idirafter ${PROJECT_ORIGIN}/includes)
+endif(UNIX)
