@@ -20,6 +20,7 @@
 #include "math_utils.h"
 #include "light.h"
 #include "robot_kinematics.h"
+#include "ik_solver.h"
 #include <algorithm>
 #include <array>
 #include <limits>
@@ -267,6 +268,9 @@ int main()
     // Gripper opening (finger_joint1 = finger_joint2, prismatic, range 0..0.04)
     float gripperOpening = 0.02f;  // half open by default
     RobotKinematics robotKinematics;
+    IKSolver ikSolver;
+    bool enableIK = false;
+    glm::vec3 ikTarget = robotKinematics.getEndEffectorPosition();
     const std::array<float, RobotKinematics::DOF> initialJointAngles = robotKinematics.getJointAngles();
     const std::vector<glm::mat4>& initialLinkTransforms = robotKinematics.getLinkWorldTransforms();
 
@@ -367,7 +371,7 @@ int main()
 
         // Joint control window
         ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Once);
-        ImGui::SetNextWindowSize(ImVec2(500, 380), ImGuiCond_Once);
+        ImGui::SetNextWindowSize(ImVec2(500, 560), ImGuiCond_Once);
         ImGui::Begin("Franka Panda Joint Control");
         bool jointChanged = false;
         for (int j = 0; j < RobotKinematics::DOF; ++j) {
@@ -393,12 +397,32 @@ int main()
             applyPandaTransforms();
         }
 
+        ImGui::Separator();
+        ImGui::Checkbox("Enable IK", &enableIK);
+        ImGui::SliderFloat("Target X", &ikTarget.x, -3.0f, 3.0f);
+        ImGui::SliderFloat("Target Y", &ikTarget.y, -3.0f, 3.0f);
+        ImGui::SliderFloat("Target Z", &ikTarget.z, -3.0f, 3.0f);
+        if (ImGui::Button("Reset Target")) {
+            ikTarget = robotKinematics.getEndEffectorPosition();
+        }
+
+        if (enableIK) {
+            ikSolver.solve(robotKinematics, ikTarget);
+            applyPandaTransforms();
+        }
+
         const glm::vec3 endEffectorPosition = robotKinematics.getEndEffectorPosition();
         ImGui::Separator();
         ImGui::Text("End Effector Position:");
         ImGui::Text("x: %.4f", endEffectorPosition.x);
         ImGui::Text("y: %.4f", endEffectorPosition.y);
         ImGui::Text("z: %.4f", endEffectorPosition.z);
+        ImGui::Text("Target Position:");
+        ImGui::Text("x: %.4f", ikTarget.x);
+        ImGui::Text("y: %.4f", ikTarget.y);
+        ImGui::Text("z: %.4f", ikTarget.z);
+        ImGui::Text("IK Error Norm: %.6f", ikSolver.getLastErrorNorm());
+        ImGui::Text("IK Iterations: %d", ikSolver.getLastIterationCount());
         ImGui::End();
 
         // Tab: toggle between camera mode and ImGui mode

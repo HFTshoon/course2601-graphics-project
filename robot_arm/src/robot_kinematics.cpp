@@ -45,6 +45,9 @@ void RobotKinematics::rebuildForwardKinematics()
     jointWorldPositions_.clear();
     jointWorldPositions_.reserve(DOF);
 
+    jointWorldAxes_.clear();
+    jointWorldAxes_.reserve(DOF);
+
     linkWorldTransforms_.clear();
     linkWorldTransforms_.reserve(DOF + 1);
     linkWorldTransforms_.push_back(pandaBaseWorld_);
@@ -58,6 +61,7 @@ void RobotKinematics::rebuildForwardKinematics()
 
         const glm::mat4 jointWorld = cur * origin;
         jointWorldPositions_.push_back(glm::vec3(jointWorld[3]));
+        jointWorldAxes_.push_back(glm::normalize(glm::mat3(jointWorld) * axis));
 
         cur = cur * origin * motion;
         linkWorldTransforms_.push_back(cur);
@@ -88,6 +92,11 @@ glm::mat4 RobotKinematics::getEndEffectorTransform() const
 const std::vector<glm::vec3>& RobotKinematics::getJointWorldPositions() const
 {
     return jointWorldPositions_;
+}
+
+const std::vector<glm::vec3>& RobotKinematics::getJointWorldAxes() const
+{
+    return jointWorldAxes_;
 }
 
 const std::vector<glm::mat4>& RobotKinematics::getLinkWorldTransforms() const

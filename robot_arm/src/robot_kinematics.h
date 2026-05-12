@@ -24,6 +24,7 @@ public:
     glm::mat4 getEndEffectorTransform() const;
 
     const std::vector<glm::vec3>& getJointWorldPositions() const;
+    const std::vector<glm::vec3>& getJointWorldAxes() const;
     const std::vector<glm::mat4>& getLinkWorldTransforms() const;
 
     float getJointLowerLimit(int index) const;
@@ -50,6 +51,7 @@ private:
     glm::mat4 pandaBaseWorld_;
     glm::mat4 endEffectorTransform_;
     std::vector<glm::vec3> jointWorldPositions_;
+    std::vector<glm::vec3> jointWorldAxes_;
     std::vector<glm::mat4> linkWorldTransforms_;
 };
 
