@@ -23,6 +23,11 @@ public:
     glm::vec3 getEndEffectorPosition() const;
     glm::mat4 getEndEffectorTransform() const;
 
+    void setToolTipLocalOffset(const glm::vec3& offset);
+    glm::vec3 getToolTipLocalOffset() const;
+    glm::vec3 getToolTipPosition() const;
+    glm::mat4 getToolTipTransform() const;
+
     const std::vector<glm::vec3>& getJointWorldPositions() const;
     const std::vector<glm::vec3>& getJointWorldAxes() const;
     const std::vector<glm::mat4>& getLinkWorldTransforms() const;
@@ -50,6 +55,7 @@ private:
     std::array<float, DOF> jointAngles_;
     glm::mat4 pandaBaseWorld_;
     glm::mat4 endEffectorTransform_;
+    glm::vec3 toolTipLocalOffset_;
     std::vector<glm::vec3> jointWorldPositions_;
     std::vector<glm::vec3> jointWorldAxes_;
     std::vector<glm::mat4> linkWorldTransforms_;

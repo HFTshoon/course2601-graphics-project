@@ -9,7 +9,8 @@ RobotKinematics::RobotKinematics()
     : pandaJoints_(createPandaJointSpecs()),
       jointAngles_(),
       pandaBaseWorld_(createPandaBaseWorldTransform()),
-      endEffectorTransform_(glm::mat4(1.0f))
+      endEffectorTransform_(glm::mat4(1.0f)),
+      toolTipLocalOffset_(0.0f, 0.1034f, 0.0f)
 {
     for (int i = 0; i < DOF; ++i) {
         jointAngles_[i] = pandaJoints_[i].initialAngle;
@@ -87,6 +88,26 @@ glm::vec3 RobotKinematics::getEndEffectorPosition() const
 glm::mat4 RobotKinematics::getEndEffectorTransform() const
 {
     return endEffectorTransform_;
+}
+
+void RobotKinematics::setToolTipLocalOffset(const glm::vec3& offset)
+{
+    toolTipLocalOffset_ = offset;
+}
+
+glm::vec3 RobotKinematics::getToolTipLocalOffset() const
+{
+    return toolTipLocalOffset_;
+}
+
+glm::vec3 RobotKinematics::getToolTipPosition() const
+{
+    return glm::vec3(getToolTipTransform()[3]);
+}
+
+glm::mat4 RobotKinematics::getToolTipTransform() const
+{
+    return endEffectorTransform_ * glm::translate(glm::mat4(1.0f), toolTipLocalOffset_);
 }
 
 const std::vector<glm::vec3>& RobotKinematics::getJointWorldPositions() const

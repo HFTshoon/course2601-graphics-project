@@ -14,7 +14,7 @@ public:
     TrajectoryTracker();
 
     void setWaypoints(const std::vector<Waypoint>& waypoints);
-    void reset(const glm::vec3& currentEndEffectorPosition);
+    void reset(const glm::vec3& currentToolTipPosition);
 
     void update(float dt, RobotKinematics& robot, IKSolver& ikSolver);
 
@@ -25,7 +25,7 @@ public:
     bool isPlaying() const;
     bool isFinished() const;
 
-    void play(const glm::vec3& currentEndEffectorPosition);
+    void play(const glm::vec3& currentToolTipPosition);
     void pause();
 
     void setPlaybackSpeed(float speed);
@@ -36,6 +36,7 @@ public:
 
     glm::vec3 getInterpolatedTargetPosition() const;
     float getDistanceToCurrentWaypoint() const;
+    float getToolTipDistanceToCurrentWaypoint() const;
     float getEndEffectorDistanceToCurrentWaypoint() const;
 
 private:
@@ -51,7 +52,7 @@ private:
     float playbackSpeed_;
     float waypointReachThreshold_;
     float distanceToCurrentWaypoint_;
-    float endEffectorDistanceToCurrentWaypoint_;
+    float toolTipDistanceToCurrentWaypoint_;
 };
 
 #endif

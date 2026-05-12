@@ -13,7 +13,7 @@ TrajectoryTracker::TrajectoryTracker()
       playbackSpeed_(0.20f),
       waypointReachThreshold_(0.025f),
       distanceToCurrentWaypoint_(0.0f),
-      endEffectorDistanceToCurrentWaypoint_(0.0f)
+      toolTipDistanceToCurrentWaypoint_(0.0f)
 {
 }
 
@@ -24,19 +24,19 @@ void TrajectoryTracker::setWaypoints(const std::vector<Waypoint>& waypoints)
     playing_ = false;
     finished_ = waypoints_.empty();
     distanceToCurrentWaypoint_ = 0.0f;
-    endEffectorDistanceToCurrentWaypoint_ = 0.0f;
+    toolTipDistanceToCurrentWaypoint_ = 0.0f;
 }
 
-void TrajectoryTracker::reset(const glm::vec3& currentEndEffectorPosition)
+void TrajectoryTracker::reset(const glm::vec3& currentToolTipPosition)
 {
     currentWaypointIndex_ = 0;
     playing_ = false;
     finished_ = waypoints_.empty();
-    interpolatedTargetPosition_ = currentEndEffectorPosition;
+    interpolatedTargetPosition_ = currentToolTipPosition;
     distanceToCurrentWaypoint_ = hasCurrentWaypoint()
         ? glm::length(waypoints_[currentWaypointIndex_].position - interpolatedTargetPosition_)
         : 0.0f;
-    endEffectorDistanceToCurrentWaypoint_ = distanceToCurrentWaypoint_;
+    toolTipDistanceToCurrentWaypoint_ = distanceToCurrentWaypoint_;
 }
 
 void TrajectoryTracker::update(float dt, RobotKinematics& robot, IKSolver& ikSolver)
@@ -45,7 +45,7 @@ void TrajectoryTracker::update(float dt, RobotKinematics& robot, IKSolver& ikSol
         playing_ = false;
         finished_ = true;
         distanceToCurrentWaypoint_ = 0.0f;
-        endEffectorDistanceToCurrentWaypoint_ = 0.0f;
+        toolTipDistanceToCurrentWaypoint_ = 0.0f;
         return;
     }
 
@@ -72,8 +72,8 @@ void TrajectoryTracker::update(float dt, RobotKinematics& robot, IKSolver& ikSol
     refreshDistances(robot);
 
     const bool targetReached = distanceToCurrentWaypoint_ <= waypointReachThreshold_;
-    const bool endEffectorReached = endEffectorDistanceToCurrentWaypoint_ <= waypointReachThreshold_;
-    if (targetReached && endEffectorReached) {
+    const bool toolTipReached = toolTipDistanceToCurrentWaypoint_ <= waypointReachThreshold_;
+    if (targetReached && toolTipReached) {
         moveToNextWaypoint();
         refreshDistances(robot);
     }
@@ -105,14 +105,14 @@ bool TrajectoryTracker::isFinished() const
     return finished_;
 }
 
-void TrajectoryTracker::play(const glm::vec3& currentEndEffectorPosition)
+void TrajectoryTracker::play(const glm::vec3& currentToolTipPosition)
 {
     if (!hasCurrentWaypoint() || finished_) {
         return;
     }
 
     if (!playing_) {
-        interpolatedTargetPosition_ = currentEndEffectorPosition;
+        interpolatedTargetPosition_ = currentToolTipPosition;
     }
     playing_ = true;
 }
@@ -152,9 +152,14 @@ float TrajectoryTracker::getDistanceToCurrentWaypoint() const
     return distanceToCurrentWaypoint_;
 }
 
+float TrajectoryTracker::getToolTipDistanceToCurrentWaypoint() const
+{
+    return toolTipDistanceToCurrentWaypoint_;
+}
+
 float TrajectoryTracker::getEndEffectorDistanceToCurrentWaypoint() const
 {
-    return endEffectorDistanceToCurrentWaypoint_;
+    return toolTipDistanceToCurrentWaypoint_;
 }
 
 bool TrajectoryTracker::hasCurrentWaypoint() const
@@ -167,14 +172,14 @@ void TrajectoryTracker::refreshDistances(const RobotKinematics& robot)
 {
     if (!hasCurrentWaypoint()) {
         distanceToCurrentWaypoint_ = 0.0f;
-        endEffectorDistanceToCurrentWaypoint_ = 0.0f;
+        toolTipDistanceToCurrentWaypoint_ = 0.0f;
         return;
     }
 
     const glm::vec3 waypointPosition = waypoints_[currentWaypointIndex_].position;
     distanceToCurrentWaypoint_ = glm::length(waypointPosition - interpolatedTargetPosition_);
-    endEffectorDistanceToCurrentWaypoint_ = glm::length(
-        waypointPosition - robot.getEndEffectorPosition()
+    toolTipDistanceToCurrentWaypoint_ = glm::length(
+        waypointPosition - robot.getToolTipPosition()
     );
 }
 

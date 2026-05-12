@@ -202,6 +202,8 @@ int main()
     Model groundModel("../resources/plane.obj");
     groundModel.diffuse = new Texture("../resources/rock_ground.png");
     groundModel.ignoreShadow = true;
+    Model paperModel("../resources/plane.obj");
+    paperModel.ignoreShadow = true;
 
     // Add entities to scene.
     Scene scene;
@@ -273,21 +275,25 @@ int main()
     RobotKinematics robotKinematics;
     IKSolver ikSolver;
     bool enableIK = false;
-    glm::vec3 ikTarget = robotKinematics.getEndEffectorPosition();
+    glm::vec3 ikTarget = robotKinematics.getToolTipPosition();
     bool enableWaypointPlayback = false;
-    const glm::vec3 initialEndEffectorPosition = robotKinematics.getEndEffectorPosition();
+    const glm::vec3 initialToolTipPosition = robotKinematics.getToolTipPosition();
     std::vector<Waypoint> testWaypoints;
-    testWaypoints.push_back(Waypoint(initialEndEffectorPosition, false));
-    testWaypoints.push_back(Waypoint(initialEndEffectorPosition + glm::vec3(0.10f, 0.00f, 0.00f), false));
-    testWaypoints.push_back(Waypoint(initialEndEffectorPosition + glm::vec3(0.10f, -0.06f, 0.05f), true));
-    testWaypoints.push_back(Waypoint(initialEndEffectorPosition + glm::vec3(-0.02f, -0.06f, 0.08f), true));
-    testWaypoints.push_back(Waypoint(initialEndEffectorPosition + glm::vec3(-0.02f, 0.04f, 0.08f), false));
+    testWaypoints.push_back(Waypoint(initialToolTipPosition, false));
+    testWaypoints.push_back(Waypoint(initialToolTipPosition + glm::vec3(0.10f, 0.00f, 0.00f), false));
+    testWaypoints.push_back(Waypoint(initialToolTipPosition + glm::vec3(0.10f, -0.06f, 0.05f), true));
+    testWaypoints.push_back(Waypoint(initialToolTipPosition + glm::vec3(-0.02f, -0.06f, 0.08f), true));
+    testWaypoints.push_back(Waypoint(initialToolTipPosition + glm::vec3(-0.02f, 0.04f, 0.08f), false));
     HandwritingPathGenerator handwritingGenerator;
     HandwritingPathGenerator::Options handwritingOptions;
-    handwritingOptions.origin = initialEndEffectorPosition;
+    handwritingOptions.paperOrigin = glm::vec3(
+        initialToolTipPosition.x,
+        0.0f,
+        initialToolTipPosition.z
+    );
     handwritingOptions.scale = 0.15f;
-    handwritingOptions.zDraw = 0.0f;
-    handwritingOptions.zTravel = 0.05f;
+    handwritingOptions.paperY = initialToolTipPosition.y - 0.03f;
+    handwritingOptions.liftHeight = 0.05f;
     handwritingOptions.sampleSpacing = 0.01f;
     handwritingOptions.useSpline = true;
     int pathMode = 0;
@@ -295,7 +301,36 @@ int main()
     std::vector<Waypoint> activeWaypoints = testWaypoints;
     TrajectoryTracker trajectoryTracker;
     trajectoryTracker.setWaypoints(activeWaypoints);
-    trajectoryTracker.reset(initialEndEffectorPosition);
+    trajectoryTracker.reset(initialToolTipPosition);
+    Entity* paperEntity = new Entity(&paperModel, glm::mat4(1.0f));
+    scene.addEntity(paperEntity);
+    auto updatePaperPlane = [&]() {
+        paperEntity->modelMatrix =
+            glm::translate(glm::vec3(
+                handwritingOptions.paperOrigin.x,
+                handwritingOptions.paperY,
+                handwritingOptions.paperOrigin.z
+            ))
+            * glm::scale(glm::vec3(0.75f, 1.0f, 0.55f));
+    };
+    auto getTrajectoryPenDown = [&]() {
+        return enableWaypointPlayback
+            && !trajectoryTracker.isFinished()
+            && trajectoryTracker.getWaypointCount() > 0
+            && trajectoryTracker.getCurrentWaypointIndex() < trajectoryTracker.getWaypointCount()
+            && trajectoryTracker.getCurrentWaypoint().penDown;
+    };
+    auto reloadActivePath = [&]() {
+        if (pathMode == 0) {
+            activeWaypoints = testWaypoints;
+        } else {
+            activeWaypoints = handwritingGenerator.generateLowercaseA(handwritingOptions);
+        }
+        trajectoryTracker.setWaypoints(activeWaypoints);
+        trajectoryTracker.reset(robotKinematics.getToolTipPosition());
+        enableWaypointPlayback = false;
+    };
+    updatePaperPlane();
     const std::array<float, RobotKinematics::DOF> initialJointAngles = robotKinematics.getJointAngles();
     const std::vector<glm::mat4>& initialLinkTransforms = robotKinematics.getLinkWorldTransforms();
 
@@ -428,79 +463,78 @@ int main()
         ImGui::SliderFloat("Target Y", &ikTarget.y, -3.0f, 3.0f);
         ImGui::SliderFloat("Target Z", &ikTarget.z, -3.0f, 3.0f);
         if (ImGui::Button("Reset Target")) {
-            ikTarget = robotKinematics.getEndEffectorPosition();
+            ikTarget = robotKinematics.getToolTipPosition();
         }
 
         ImGui::Separator();
         if (ImGui::Combo("Path Mode", &pathMode, pathModeItems, 2)) {
-            if (pathMode == 0) {
-                activeWaypoints = testWaypoints;
-            } else {
-                handwritingOptions.origin = robotKinematics.getEndEffectorPosition();
-                activeWaypoints = handwritingGenerator.generateLowercaseA(handwritingOptions);
-            }
-            trajectoryTracker.setWaypoints(activeWaypoints);
-            trajectoryTracker.reset(robotKinematics.getEndEffectorPosition());
-            enableWaypointPlayback = false;
+            reloadActivePath();
         }
         if (ImGui::Checkbox("Use Spline", &handwritingOptions.useSpline)) {
-            if (pathMode == 1) {
-                activeWaypoints = handwritingGenerator.generateLowercaseA(handwritingOptions);
-                trajectoryTracker.setWaypoints(activeWaypoints);
-                trajectoryTracker.reset(robotKinematics.getEndEffectorPosition());
-                enableWaypointPlayback = false;
-            }
+            reloadActivePath();
         }
         if (ImGui::SliderFloat("Glyph Scale", &handwritingOptions.scale, 0.05f, 0.30f)) {
-            if (pathMode == 1) {
-                activeWaypoints = handwritingGenerator.generateLowercaseA(handwritingOptions);
-                trajectoryTracker.setWaypoints(activeWaypoints);
-                trajectoryTracker.reset(robotKinematics.getEndEffectorPosition());
-                enableWaypointPlayback = false;
-            }
+            reloadActivePath();
         }
         if (ImGui::SliderFloat("Sample Spacing", &handwritingOptions.sampleSpacing, 0.005f, 0.030f)) {
-            if (pathMode == 1) {
-                activeWaypoints = handwritingGenerator.generateLowercaseA(handwritingOptions);
-                trajectoryTracker.setWaypoints(activeWaypoints);
-                trajectoryTracker.reset(robotKinematics.getEndEffectorPosition());
-                enableWaypointPlayback = false;
-            }
+            reloadActivePath();
         }
-        if (ImGui::SliderFloat("Travel Height", &handwritingOptions.zTravel, 0.01f, 0.15f)) {
-            if (pathMode == 1) {
-                activeWaypoints = handwritingGenerator.generateLowercaseA(handwritingOptions);
-                trajectoryTracker.setWaypoints(activeWaypoints);
-                trajectoryTracker.reset(robotKinematics.getEndEffectorPosition());
-                enableWaypointPlayback = false;
-            }
+        if (ImGui::SliderFloat("Paper Y", &handwritingOptions.paperY, -1.0f, 2.0f)) {
+            updatePaperPlane();
+            reloadActivePath();
+        }
+        if (ImGui::SliderFloat("Lift Height", &handwritingOptions.liftHeight, 0.01f, 0.15f)) {
+            reloadActivePath();
+        }
+        if (ImGui::SliderFloat("Paper Origin X", &handwritingOptions.paperOrigin.x, -1.5f, 1.5f)) {
+            updatePaperPlane();
+            reloadActivePath();
+        }
+        if (ImGui::SliderFloat("Paper Origin Z", &handwritingOptions.paperOrigin.z, -1.5f, 1.5f)) {
+            updatePaperPlane();
+            reloadActivePath();
+        }
+        if (ImGui::Button("Reset Paper Origin Near Tool Tip")) {
+            const glm::vec3 toolTipPosition = robotKinematics.getToolTipPosition();
+            handwritingOptions.paperOrigin.x = toolTipPosition.x;
+            handwritingOptions.paperOrigin.z = toolTipPosition.z;
+            updatePaperPlane();
+            reloadActivePath();
         }
         if (ImGui::Button("Generate / Reload Path")) {
-            if (pathMode == 0) {
-                activeWaypoints = testWaypoints;
-            } else {
-                handwritingOptions.origin = robotKinematics.getEndEffectorPosition();
-                activeWaypoints = handwritingGenerator.generateLowercaseA(handwritingOptions);
-            }
-            trajectoryTracker.setWaypoints(activeWaypoints);
-            trajectoryTracker.reset(robotKinematics.getEndEffectorPosition());
-            enableWaypointPlayback = false;
+            updatePaperPlane();
+            reloadActivePath();
         }
         ImGui::Text("Current Path Mode: %s", pathModeItems[pathMode]);
         ImGui::Text("Use Spline: %s", handwritingOptions.useSpline ? "true" : "false");
         ImGui::Text("Generated Waypoint Count: %d", trajectoryTracker.getWaypointCount());
+        ImGui::Text("Paper Y: %.4f", handwritingOptions.paperY);
+        ImGui::Text("Lift Height: %.4f", handwritingOptions.liftHeight);
+        ImGui::Text(
+            "Paper Origin: x %.4f, z %.4f",
+            handwritingOptions.paperOrigin.x,
+            handwritingOptions.paperOrigin.z
+        );
+        glm::vec3 toolTipLocalOffset = robotKinematics.getToolTipLocalOffset();
+        bool toolTipOffsetChanged = false;
+        toolTipOffsetChanged |= ImGui::SliderFloat("Tool Tip Offset X", &toolTipLocalOffset.x, -0.20f, 0.20f);
+        toolTipOffsetChanged |= ImGui::SliderFloat("Tool Tip Offset Y", &toolTipLocalOffset.y, -0.05f, 0.25f);
+        toolTipOffsetChanged |= ImGui::SliderFloat("Tool Tip Offset Z", &toolTipLocalOffset.z, -0.20f, 0.20f);
+        if (toolTipOffsetChanged) {
+            robotKinematics.setToolTipLocalOffset(toolTipLocalOffset);
+        }
 
         ImGui::Separator();
         if (ImGui::Checkbox("Enable Waypoint Playback", &enableWaypointPlayback)) {
             if (enableWaypointPlayback) {
-                trajectoryTracker.play(robotKinematics.getEndEffectorPosition());
+                trajectoryTracker.play(robotKinematics.getToolTipPosition());
             } else {
                 trajectoryTracker.pause();
             }
         }
         if (ImGui::Button("Play")) {
             enableWaypointPlayback = true;
-            trajectoryTracker.play(robotKinematics.getEndEffectorPosition());
+            trajectoryTracker.play(robotKinematics.getToolTipPosition());
         }
         ImGui::SameLine();
         if (ImGui::Button("Pause")) {
@@ -508,7 +542,7 @@ int main()
         }
         ImGui::SameLine();
         if (ImGui::Button("Reset Playback")) {
-            trajectoryTracker.reset(robotKinematics.getEndEffectorPosition());
+            trajectoryTracker.reset(robotKinematics.getToolTipPosition());
         }
 
         float playbackSpeed = trajectoryTracker.getPlaybackSpeed();
@@ -529,12 +563,35 @@ int main()
         }
 
         const glm::vec3 endEffectorPosition = robotKinematics.getEndEffectorPosition();
+        const glm::vec3 toolTipPosition = robotKinematics.getToolTipPosition();
+        const bool currentPenDown = getTrajectoryPenDown();
+        const bool hasCurrentWaypointForDebug = trajectoryTracker.getWaypointCount() > 0
+            && trajectoryTracker.getCurrentWaypointIndex() < trajectoryTracker.getWaypointCount();
+        const bool currentWaypointPenDown = hasCurrentWaypointForDebug
+            ? trajectoryTracker.getCurrentWaypoint().penDown
+            : false;
+        const float expectedWaypointY = currentWaypointPenDown
+            ? handwritingOptions.paperY
+            : handwritingOptions.paperY + handwritingOptions.liftHeight;
+
         ImGui::Separator();
         ImGui::Text("End Effector Position:");
         ImGui::Text("x: %.4f", endEffectorPosition.x);
         ImGui::Text("y: %.4f", endEffectorPosition.y);
         ImGui::Text("z: %.4f", endEffectorPosition.z);
-        ImGui::Text("Target Position:");
+        ImGui::Text("End Effector Height Above Paper: %.4f", endEffectorPosition.y - handwritingOptions.paperY);
+        ImGui::Text("Tool Tip Position:");
+        ImGui::Text("x: %.4f", toolTipPosition.x);
+        ImGui::Text("y: %.4f", toolTipPosition.y);
+        ImGui::Text("z: %.4f", toolTipPosition.z);
+        ImGui::Text("Tool Tip Height Above Paper: %.4f", toolTipPosition.y - handwritingOptions.paperY);
+        ImGui::Text("Playback penDown: %s", currentPenDown ? "true" : "false");
+        if (pathMode == 1) {
+            ImGui::Text("Expected Current Waypoint Y: %.4f", expectedWaypointY);
+        } else {
+            ImGui::Text("Expected Current Waypoint Y: n/a for Test Waypoints");
+        }
+        ImGui::Text("Tool Tip Target Position:");
         ImGui::Text("x: %.4f", ikTarget.x);
         ImGui::Text("y: %.4f", ikTarget.y);
         ImGui::Text("z: %.4f", ikTarget.z);
@@ -558,6 +615,15 @@ int main()
             ImGui::Text("y: %.4f", currentWaypoint.position.y);
             ImGui::Text("z: %.4f", currentWaypoint.position.z);
             ImGui::Text("Current Waypoint penDown: %s", currentWaypoint.penDown ? "true" : "false");
+            if (pathMode == 1) {
+                const float waypointExpectedY = currentWaypoint.penDown
+                    ? handwritingOptions.paperY
+                    : handwritingOptions.paperY + handwritingOptions.liftHeight;
+                ImGui::Text("Current Waypoint Expected Y: %.4f", waypointExpectedY);
+                ImGui::Text("Current Waypoint Y Error: %.6f", currentWaypoint.position.y - waypointExpectedY);
+            } else {
+                ImGui::Text("Current Waypoint Y Check: n/a for Test Waypoints");
+            }
         } else {
             ImGui::Text("Current Waypoint Position: finished");
             ImGui::Text("Current Waypoint penDown: n/a");
@@ -569,8 +635,8 @@ int main()
         ImGui::Text("z: %.4f", interpolatedTargetPosition.z);
         ImGui::Text("Distance To Current Waypoint: %.6f", trajectoryTracker.getDistanceToCurrentWaypoint());
         ImGui::Text(
-            "End Effector Distance To Waypoint: %.6f",
-            trajectoryTracker.getEndEffectorDistanceToCurrentWaypoint()
+            "Tool Tip Distance To Waypoint: %.6f",
+            trajectoryTracker.getToolTipDistanceToCurrentWaypoint()
         );
         ImGui::End();
 

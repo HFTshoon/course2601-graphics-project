@@ -24,7 +24,7 @@ public:
 
     explicit IKSolver(const Options& options = Options());
 
-    bool solve(RobotKinematics& robot, const glm::vec3& target);
+    bool solve(RobotKinematics& robot, const glm::vec3& toolTipTarget);
 
     float getLastErrorNorm() const;
     int getLastIterationCount() const;

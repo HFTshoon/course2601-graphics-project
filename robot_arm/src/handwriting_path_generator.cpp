@@ -38,7 +38,7 @@ std::vector<Waypoint> HandwritingPathGenerator::generateLowercaseA(const Options
     if (!waypoints.empty()) {
         const glm::vec3 lastPosition = waypoints.back().position;
         waypoints.push_back(Waypoint(
-            glm::vec3(lastPosition.x, options.origin.y + options.zTravel, lastPosition.z),
+            glm::vec3(lastPosition.x, options.paperY + options.liftHeight, lastPosition.z),
             false
         ));
     }
@@ -49,12 +49,12 @@ std::vector<Waypoint> HandwritingPathGenerator::generateLowercaseA(const Options
 glm::vec3 HandwritingPathGenerator::localToWorld(
     const glm::vec2& localPoint,
     const Options& options,
-    float heightOffset)
+    float worldY)
 {
     return glm::vec3(
-        options.origin.x + options.scale * localPoint.x,
-        options.origin.y + heightOffset,
-        options.origin.z + options.scale * localPoint.y
+        options.paperOrigin.x + options.scale * localPoint.x,
+        worldY,
+        options.paperOrigin.z + options.scale * localPoint.y
     );
 }
 
@@ -73,7 +73,7 @@ void HandwritingPathGenerator::appendStroke(
     std::vector<glm::vec3> drawControlPoints;
     drawControlPoints.reserve(localPoints.size());
     for (size_t i = 0; i < localPoints.size(); ++i) {
-        drawControlPoints.push_back(localToWorld(localPoints[i], options, options.zDraw));
+        drawControlPoints.push_back(localToWorld(localPoints[i], options, options.paperY));
     }
 
     std::vector<glm::vec3> drawPoints;
@@ -92,11 +92,11 @@ void HandwritingPathGenerator::appendStroke(
     }
 
     const glm::vec3 firstDraw = drawPoints.front();
-    const glm::vec3 firstTravel(firstDraw.x, options.origin.y + options.zTravel, firstDraw.z);
+    const glm::vec3 firstTravel(firstDraw.x, options.paperY + options.liftHeight, firstDraw.z);
     if (!waypoints.empty()) {
         const glm::vec3 lastPosition = waypoints.back().position;
         waypoints.push_back(Waypoint(
-            glm::vec3(lastPosition.x, options.origin.y + options.zTravel, lastPosition.z),
+            glm::vec3(lastPosition.x, options.paperY + options.liftHeight, lastPosition.z),
             false
         ));
     }

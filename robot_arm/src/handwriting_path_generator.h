@@ -10,18 +10,18 @@
 class HandwritingPathGenerator {
 public:
     struct Options {
-        glm::vec3 origin;
+        glm::vec3 paperOrigin;
         float scale;
-        float zDraw;
-        float zTravel;
+        float paperY;
+        float liftHeight;
         float sampleSpacing;
         bool useSpline;
 
         Options()
-            : origin(0.0f),
+            : paperOrigin(0.0f),
               scale(0.15f),
-              zDraw(0.0f),
-              zTravel(0.05f),
+              paperY(0.0f),
+              liftHeight(0.05f),
               sampleSpacing(0.01f),
               useSpline(true)
         {
@@ -31,7 +31,7 @@ public:
     std::vector<Waypoint> generateLowercaseA(const Options& options) const;
 
 private:
-    static glm::vec3 localToWorld(const glm::vec2& localPoint, const Options& options, float heightOffset);
+    static glm::vec3 localToWorld(const glm::vec2& localPoint, const Options& options, float worldY);
     static void appendStroke(
         const std::vector<glm::vec2>& localPoints,
         const Options& options,

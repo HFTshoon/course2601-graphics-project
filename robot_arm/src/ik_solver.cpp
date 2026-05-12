@@ -12,7 +12,7 @@ IKSolver::IKSolver(const Options& options)
 {
 }
 
-bool IKSolver::solve(RobotKinematics& robot, const glm::vec3& target)
+bool IKSolver::solve(RobotKinematics& robot, const glm::vec3& toolTipTarget)
 {
     robot.rebuildForwardKinematics();
     lastIterationCount_ = 0;
@@ -22,8 +22,8 @@ bool IKSolver::solve(RobotKinematics& robot, const glm::vec3& target)
     const float dampingScale = 1.0f / (1.0f + std::max(0.0f, options_.damping));
 
     for (int iteration = 0; iteration < maxIterations; ++iteration) {
-        const glm::vec3 endEffectorPosition = robot.getEndEffectorPosition();
-        const glm::vec3 error = target - endEffectorPosition;
+        const glm::vec3 toolTipPosition = robot.getToolTipPosition();
+        const glm::vec3 error = toolTipTarget - toolTipPosition;
         lastErrorNorm_ = glm::length(error);
 
         if (lastErrorNorm_ <= tolerance) {
@@ -37,7 +37,7 @@ bool IKSolver::solve(RobotKinematics& robot, const glm::vec3& target)
         for (int jointIndex = 0; jointIndex < RobotKinematics::DOF; ++jointIndex) {
             const glm::vec3 jacobianColumn = glm::cross(
                 jointAxes[jointIndex],
-                endEffectorPosition - jointPositions[jointIndex]
+                toolTipPosition - jointPositions[jointIndex]
             );
             const float deltaAngle = options_.stepSize * dampingScale * glm::dot(jacobianColumn, error);
             const float unclampedAngle = nextJointAngles[jointIndex] + deltaAngle;
@@ -52,7 +52,7 @@ bool IKSolver::solve(RobotKinematics& robot, const glm::vec3& target)
         lastIterationCount_ = iteration + 1;
     }
 
-    const glm::vec3 finalError = target - robot.getEndEffectorPosition();
+    const glm::vec3 finalError = toolTipTarget - robot.getToolTipPosition();
     lastErrorNorm_ = glm::length(finalError);
     return lastErrorNorm_ <= tolerance;
 }
