@@ -19,6 +19,7 @@
 #include "scene.h"
 #include "math_utils.h"
 #include "light.h"
+#include "robot_kinematics.h"
 #include <algorithm>
 #include <array>
 #include <limits>
@@ -263,60 +264,20 @@ int main()
         return transform * renderRotation;
     };
 
-    struct PandaJointSpec {
-        glm::vec3 xyz;
-        glm::vec3 rpy;
-        glm::vec3 axis;
-        float lower;       // joint limit lower (rad)
-        float upper;       // joint limit upper (rad)
-        float initialAngle;
-    };
-
-    // Joint specs from panda_arm.xacro
-    const PandaJointSpec pandaJoints[] = {
-        // joint1: xyz=(0,0,0.333), rpy=(0,0,0), axis=(0,0,1), lower=-2.8973, upper=2.8973
-        { glm::vec3(0.0f, 0.0f, 0.333f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), -2.8973f, 2.8973f, 0.0f },
-        // joint2: xyz=(0,0,0), rpy=(-pi/2,0,0), axis=(0,0,1), lower=-1.7628, upper=1.7628
-        { glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(-glm::half_pi<float>(), 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), -1.7628f, 1.7628f, -glm::quarter_pi<float>() },
-        // joint3: xyz=(0,-0.316,0), rpy=(pi/2,0,0), axis=(0,0,1), lower=-2.8973, upper=2.8973
-        { glm::vec3(0.0f, -0.316f, 0.0f), glm::vec3(glm::half_pi<float>(), 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), -2.8973f, 2.8973f, 0.0f },
-        // joint4: xyz=(0.0825,0,0), rpy=(pi/2,0,0), axis=(0,0,1), lower=-3.0718, upper=-0.0698
-        { glm::vec3(0.0825f, 0.0f, 0.0f), glm::vec3(glm::half_pi<float>(), 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), -3.0718f, -0.0698f, -3.0f * glm::quarter_pi<float>() },
-        // joint5: xyz=(-0.0825,0.384,0), rpy=(-pi/2,0,0), axis=(0,0,1), lower=-2.8973, upper=2.8973
-        { glm::vec3(-0.0825f, 0.384f, 0.0f), glm::vec3(-glm::half_pi<float>(), 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), -2.8973f, 2.8973f, 0.0f },
-        // joint6: xyz=(0,0,0), rpy=(pi/2,0,0), axis=(0,0,1), lower=-0.0175, upper=3.7525
-        { glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(glm::half_pi<float>(), 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), -0.0175f, 3.7525f, glm::half_pi<float>() },
-        // joint7: xyz=(0.088,0,0), rpy=(pi/2,0,0), axis=(0,0,1), lower=-2.8973, upper=2.8973
-        { glm::vec3(0.088f, 0.0f, 0.0f), glm::vec3(glm::half_pi<float>(), 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f), -2.8973f, 2.8973f, glm::quarter_pi<float>() }
-    };
-
     // Gripper opening (finger_joint1 = finger_joint2, prismatic, range 0..0.04)
     float gripperOpening = 0.02f;  // half open by default
-
-    // Dynamic joint angles (start at initial positions)
-    float jointAngles[7] = {
-        pandaJoints[0].initialAngle,
-        pandaJoints[1].initialAngle,
-        pandaJoints[2].initialAngle,
-        pandaJoints[3].initialAngle,
-        pandaJoints[4].initialAngle,
-        pandaJoints[5].initialAngle,
-        pandaJoints[6].initialAngle,
-    };
-
-    glm::mat4 pandaBaseWorld = glm::mat4(1.0f);
-    pandaBaseWorld = glm::translate(pandaBaseWorld, glm::vec3(0.0f, -0.5f, 1.0f));
-    pandaBaseWorld = glm::rotate(pandaBaseWorld, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    pandaBaseWorld = glm::scale(pandaBaseWorld, glm::vec3(2.0f));
+    RobotKinematics robotKinematics;
+    const std::array<float, RobotKinematics::DOF> initialJointAngles = robotKinematics.getJointAngles();
+    const std::vector<glm::mat4>& initialLinkTransforms = robotKinematics.getLinkWorldTransforms();
 
     // Entities for robot arm links (rebuilt each frame)
     Entity* pandaLinkEntities[8];
-    pandaLinkEntities[0] = new Entity(&pandaLink0Model, pandaBaseWorld);
+    pandaLinkEntities[0] = new Entity(&pandaLink0Model, initialLinkTransforms[0]);
     for (int i = 1; i < 8; ++i)
-        pandaLinkEntities[i] = new Entity(pandaLinks[i], glm::mat4(1.0f));
+        pandaLinkEntities[i] = new Entity(pandaLinks[i], initialLinkTransforms[i]);
 
     // Hand and finger entities
-    Entity* handEntity      = new Entity(&pandaHandModel,   glm::mat4(1.0f));
+    Entity* handEntity      = new Entity(&pandaHandModel,   robotKinematics.getEndEffectorTransform());
     Entity* leftFingerEntity  = new Entity(&pandaFingerModel, glm::mat4(1.0f));
     Entity* rightFingerEntity = new Entity(&pandaFingerModel, glm::mat4(1.0f));
 
@@ -327,21 +288,14 @@ int main()
     scene.addEntity(leftFingerEntity);
     scene.addEntity(rightFingerEntity);
 
-    // Helper: rebuild link transforms from current joint angles
-    auto rebuildPandaTransforms = [&]() {
-        glm::mat4 cur = pandaBaseWorld;
-        for (int j = 0; j < 7; ++j) {
-            glm::mat4 origin = urdfOriginToRender(pandaJoints[j].xyz, pandaJoints[j].rpy);
-            glm::vec3 axis = glm::normalize(urdfVecToRender(pandaJoints[j].axis));
-            glm::mat4 motion = glm::rotate(glm::mat4(1.0f), jointAngles[j], axis);
-            cur = cur * origin * motion;
-            pandaLinkEntities[j + 1]->modelMatrix = cur;
+    // Helper: copy kinematics output into the existing render entities.
+    auto applyPandaTransforms = [&]() {
+        const std::vector<glm::mat4>& linkTransforms = robotKinematics.getLinkWorldTransforms();
+        for (int linkIndex = 0; linkIndex < 8; ++linkIndex) {
+            pandaLinkEntities[linkIndex]->modelMatrix = linkTransforms[linkIndex];
         }
-        // joint8 (fixed): xyz=(0,0,0.107), rpy=(0,0,0)
-        glm::mat4 joint8 = urdfOriginToRender(glm::vec3(0.0f, 0.0f, 0.107f), glm::vec3(0.0f));
-        // hand_joint (fixed): xyz=(0,0,0), rpy=(0,0,-pi/4)
-        glm::mat4 handJoint = urdfOriginToRender(glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, -glm::quarter_pi<float>()));
-        glm::mat4 handWorld = cur * joint8 * handJoint;
+
+        const glm::mat4 handWorld = robotKinematics.getEndEffectorTransform();
         handEntity->modelMatrix = handWorld;
 
         // finger_joint1/2: xyz=(0,0,0.0584), prismatic along ±y
@@ -355,7 +309,7 @@ int main()
         leftFingerEntity->modelMatrix  = handWorld * fingerBase * leftFingerMotion;
         rightFingerEntity->modelMatrix = handWorld * fingerBase * rightFingerMotion * rightFingerVisual;
     };
-    rebuildPandaTransforms();
+    applyPandaTransforms();
 
     // define depth textures for cascaded shadow mapping
     std::array<CascadeShadowMap, CSM_CASCADE_COUNT> cascadeShadowMaps = {
@@ -413,28 +367,39 @@ int main()
 
         // Joint control window
         ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Once);
-        ImGui::SetNextWindowSize(ImVec2(500, 290), ImGuiCond_Once);
+        ImGui::SetNextWindowSize(ImVec2(500, 380), ImGuiCond_Once);
         ImGui::Begin("Franka Panda Joint Control");
         bool jointChanged = false;
-        for (int j = 0; j < 7; ++j) {
+        for (int j = 0; j < RobotKinematics::DOF; ++j) {
             char label[32];
             snprintf(label, sizeof(label), "Joint %d [%.2f, %.2f]", j + 1,
-                     pandaJoints[j].lower, pandaJoints[j].upper);
-            if (ImGui::SliderFloat(label, &jointAngles[j], pandaJoints[j].lower, pandaJoints[j].upper))
+                     robotKinematics.getJointLowerLimit(j), robotKinematics.getJointUpperLimit(j));
+            float jointAngle = robotKinematics.getJointAngle(j);
+            if (ImGui::SliderFloat(label, &jointAngle, robotKinematics.getJointLowerLimit(j), robotKinematics.getJointUpperLimit(j))) {
+                robotKinematics.setJointAngle(j, jointAngle);
                 jointChanged = true;
+            }
         }
         if (ImGui::SliderFloat("Gripper [0.00, 0.04]", &gripperOpening, 0.0f, 0.04f))
             jointChanged = true;
         if (ImGui::Button("Reset")) {
-            for (int j = 0; j < 7; ++j)
-                jointAngles[j] = pandaJoints[j].initialAngle;
+            robotKinematics.setJointAngles(initialJointAngles);
             gripperOpening = 0.02f;
             jointChanged = true;
         }
-        ImGui::End();
 
-        if (jointChanged)
-            rebuildPandaTransforms();
+        if (jointChanged) {
+            robotKinematics.rebuildForwardKinematics();
+            applyPandaTransforms();
+        }
+
+        const glm::vec3 endEffectorPosition = robotKinematics.getEndEffectorPosition();
+        ImGui::Separator();
+        ImGui::Text("End Effector Position:");
+        ImGui::Text("x: %.4f", endEffectorPosition.x);
+        ImGui::Text("y: %.4f", endEffectorPosition.y);
+        ImGui::Text("z: %.4f", endEffectorPosition.z);
+        ImGui::End();
 
         // Tab: toggle between camera mode and ImGui mode
         if (glfwGetKey(window, GLFW_KEY_TAB) == GLFW_PRESS && !isKeyboardDone[GLFW_KEY_TAB]) {
