@@ -6,6 +6,7 @@ in vec2 TexCoord;
 
 uniform sampler2D brushTexture;
 uniform float opacity;
+uniform vec3 strokeColor;
 
 void main()
 {
@@ -14,5 +15,5 @@ void main()
     if (alpha < 0.01) {
         discard;
     }
-    FragColor = vec4(0.0, 0.0, 0.0, alpha);
+    FragColor = vec4(strokeColor, alpha);
 }

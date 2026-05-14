@@ -29,6 +29,9 @@ public:
     void setOpacity(float opacity);
     float getOpacity() const;
 
+    void setStrokeColor(const glm::vec3& color);
+    glm::vec3 getStrokeColor() const;
+
     void setStampSpacing(float spacing);
     float getStampSpacing() const;
 
@@ -45,6 +48,7 @@ public:
 private:
     struct BrushStamp {
         glm::vec3 position;
+        glm::vec3 color;
         float size;
         float opacity;
     };
@@ -63,6 +67,7 @@ private:
         const char* fragmentShaderSource,
         const char* debugName
     ) const;
+    unsigned int loadBrushTextureFromFile(const std::string& path) const;
     unsigned int createFallbackBrushTexture() const;
     bool readTextFile(const std::string& path, std::string& contents) const;
 
@@ -78,6 +83,7 @@ private:
     glm::vec3 lastStampPosition_;
     float brushSize_;
     float opacity_;
+    glm::vec3 strokeColor_;
     float stampSpacing_;
     float paperY_;
     float paperEpsilon_;

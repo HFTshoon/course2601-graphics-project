@@ -25,6 +25,7 @@
 #include "waypoint.h"
 #include "handwriting_path_generator.h"
 #include "stroke_renderer.h"
+#include "pen_preset.h"
 #include <algorithm>
 #include <array>
 #include <limits>
@@ -41,8 +42,8 @@ bool isWindowed = true;
 bool isKeyboardDone[1024] = { 0 };
 
 // setting
-const unsigned int SCR_WIDTH = 1600;
-const unsigned int SCR_HEIGHT = 900;
+const unsigned int SCR_WIDTH = 3200;
+const unsigned int SCR_HEIGHT = 1800;
 const unsigned int SHADOW_WIDTH = 2048;
 const unsigned int SHADOW_HEIGHT = 2048;
 const float planeSize = 15.f;
@@ -316,6 +317,22 @@ int main()
     trajectoryTracker.reset(initialToolTipPosition);
     StrokeRenderer strokeRenderer;
     bool enableStrokeRendering = false;
+    std::vector<PenPreset> penPresets = createDefaultPenPresets();
+    std::vector<const char*> penPresetNames;
+    for (size_t presetIndex = 0; presetIndex < penPresets.size(); ++presetIndex) {
+        penPresetNames.push_back(penPresets[presetIndex].name.c_str());
+    }
+    int selectedPenPreset = penPresets.size() > 1 ? 1 : 0;
+    auto applyPenPreset = [&](const PenPreset& preset) {
+        strokeRenderer.setBrushTexturePath(preset.brushTexturePath);
+        strokeRenderer.setStrokeColor(preset.color);
+        strokeRenderer.setBrushSize(preset.brushSize);
+        strokeRenderer.setOpacity(preset.opacity);
+        strokeRenderer.setStampSpacing(preset.stampSpacing);
+    };
+    if (!penPresets.empty()) {
+        applyPenPreset(penPresets[selectedPenPreset]);
+    }
     const char* strokeRenderModeItems[] = { "Line Strip", "Image Brush Stamp" };
     Entity* paperEntity = new Entity(&paperModel, glm::mat4(1.0f));
     scene.addEntity(paperEntity);
@@ -576,6 +593,16 @@ int main()
         if (ImGui::Button("Clear Stroke")) {
             strokeRenderer.clear();
         }
+        if (!penPresets.empty()) {
+            if (ImGui::Combo(
+                    "Pen Preset",
+                    &selectedPenPreset,
+                    &penPresetNames[0],
+                    static_cast<int>(penPresetNames.size()))) {
+                applyPenPreset(penPresets[selectedPenPreset]);
+            }
+            ImGui::Text("Selected Pen: %s", penPresets[selectedPenPreset].name.c_str());
+        }
         int strokeRenderMode = static_cast<int>(strokeRenderer.getRenderMode());
         if (ImGui::Combo("Stroke Render Mode", &strokeRenderMode, strokeRenderModeItems, 2)) {
             strokeRenderer.setRenderMode(static_cast<StrokeRenderMode>(strokeRenderMode));
@@ -588,6 +615,15 @@ int main()
         float strokeOpacity = strokeRenderer.getOpacity();
         if (ImGui::SliderFloat("Opacity", &strokeOpacity, 0.05f, 1.0f)) {
             strokeRenderer.setOpacity(strokeOpacity);
+        }
+        glm::vec3 strokeColor = strokeRenderer.getStrokeColor();
+        float strokeColorValues[3] = { strokeColor.r, strokeColor.g, strokeColor.b };
+        if (ImGui::ColorEdit3("Stroke Color", strokeColorValues)) {
+            strokeRenderer.setStrokeColor(glm::vec3(
+                strokeColorValues[0],
+                strokeColorValues[1],
+                strokeColorValues[2]
+            ));
         }
         float stampSpacing = strokeRenderer.getStampSpacing();
         if (ImGui::SliderFloat("Stamp Spacing", &stampSpacing, 0.002f, 0.060f)) {

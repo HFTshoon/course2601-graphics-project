@@ -19,6 +19,7 @@ StrokeRenderer::StrokeRenderer()
       lastStampPosition_(0.0f),
       brushSize_(0.025f),
       opacity_(0.9f),
+      strokeColor_(0.02f, 0.018f, 0.015f),
       stampSpacing_(0.012f),
       paperY_(0.0f),
       paperEpsilon_(0.003f),
@@ -144,6 +145,19 @@ float StrokeRenderer::getOpacity() const
     return opacity_;
 }
 
+void StrokeRenderer::setStrokeColor(const glm::vec3& color)
+{
+    strokeColor_ = glm::clamp(color, glm::vec3(0.0f), glm::vec3(1.0f));
+    for (size_t stampIndex = 0; stampIndex < brushStamps_.size(); ++stampIndex) {
+        brushStamps_[stampIndex].color = strokeColor_;
+    }
+}
+
+glm::vec3 StrokeRenderer::getStrokeColor() const
+{
+    return strokeColor_;
+}
+
 void StrokeRenderer::setStampSpacing(float spacing)
 {
     stampSpacing_ = std::max(0.001f, spacing);
@@ -228,6 +242,7 @@ void StrokeRenderer::addStamp(const glm::vec3& position)
 {
     BrushStamp stamp;
     stamp.position = position;
+    stamp.color = strokeColor_;
     stamp.size = brushSize_;
     stamp.opacity = opacity_;
     brushStamps_.push_back(stamp);
@@ -305,23 +320,12 @@ void StrokeRenderer::ensureBrushTexture()
         brushTextureID_ = 0;
     }
 
-    int width = 0;
-    int height = 0;
-    int channels = 0;
-    stbi_set_flip_vertically_on_load(false);
-    unsigned char* pixels = stbi_load(brushTexturePath_.c_str(), &width, &height, &channels, 4);
-
-    if (pixels != NULL) {
-        glGenTextures(1, &brushTextureID_);
-        glBindTexture(GL_TEXTURE_2D, brushTextureID_);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-        glBindTexture(GL_TEXTURE_2D, 0);
-        stbi_image_free(pixels);
-    } else {
+    brushTextureID_ = loadBrushTextureFromFile(brushTexturePath_);
+    const std::string fallbackBrushPath = "../assets/brushes/basic_circle.png";
+    if (brushTextureID_ == 0 && brushTexturePath_ != fallbackBrushPath) {
+        brushTextureID_ = loadBrushTextureFromFile(fallbackBrushPath);
+    }
+    if (brushTextureID_ == 0) {
         brushTextureID_ = createFallbackBrushTexture();
     }
 
@@ -381,12 +385,13 @@ unsigned int StrokeRenderer::compileBrushShaderProgram() const
         "in vec2 TexCoord;\n"
         "uniform sampler2D brushTexture;\n"
         "uniform float opacity;\n"
+        "uniform vec3 strokeColor;\n"
         "void main()\n"
         "{\n"
         "    vec4 tex = texture(brushTexture, TexCoord);\n"
         "    float alpha = tex.a * opacity;\n"
         "    if (alpha < 0.01) discard;\n"
-        "    FragColor = vec4(0.0, 0.0, 0.0, alpha);\n"
+        "    FragColor = vec4(strokeColor, alpha);\n"
         "}\n";
     return compileShaderProgramFromSource(fallbackVertex, fallbackFragment, "BRUSH_STAMP_FALLBACK");
 }
@@ -439,6 +444,30 @@ unsigned int StrokeRenderer::compileShaderProgramFromSource(
     glDeleteShader(vertexShader);
     glDeleteShader(fragmentShader);
     return shaderProgram;
+}
+
+unsigned int StrokeRenderer::loadBrushTextureFromFile(const std::string& path) const
+{
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    stbi_set_flip_vertically_on_load(false);
+    unsigned char* pixels = stbi_load(path.c_str(), &width, &height, &channels, 4);
+    if (pixels == NULL) {
+        return 0;
+    }
+
+    unsigned int textureID = 0;
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_2D, textureID);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    stbi_image_free(pixels);
+    return textureID;
 }
 
 unsigned int StrokeRenderer::createFallbackBrushTexture() const
@@ -500,7 +529,13 @@ void StrokeRenderer::renderLineStrips(const glm::mat4& view, const glm::mat4& pr
     glUseProgram(lineShaderProgram_);
     glUniformMatrix4fv(glGetUniformLocation(lineShaderProgram_, "view"), 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(glGetUniformLocation(lineShaderProgram_, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
-    glUniform4f(glGetUniformLocation(lineShaderProgram_, "strokeColor"), 0.02f, 0.018f, 0.015f, opacity_);
+    glUniform4f(
+        glGetUniformLocation(lineShaderProgram_, "strokeColor"),
+        strokeColor_.r,
+        strokeColor_.g,
+        strokeColor_.b,
+        opacity_
+    );
 
     glBindVertexArray(lineVao_);
     glBindBuffer(GL_ARRAY_BUFFER, lineVbo_);
@@ -561,6 +596,12 @@ void StrokeRenderer::renderBrushStamps(const glm::mat4& view, const glm::mat4& p
         };
 
         glUniform1f(glGetUniformLocation(stampShaderProgram_, "opacity"), stamp.opacity);
+        glUniform3f(
+            glGetUniformLocation(stampShaderProgram_, "strokeColor"),
+            stamp.color.r,
+            stamp.color.g,
+            stamp.color.b
+        );
         glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);
         glDrawArrays(GL_TRIANGLES, 0, 6);
     }
