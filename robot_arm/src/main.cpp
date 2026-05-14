@@ -24,6 +24,7 @@
 #include "trajectory_tracker.h"
 #include "waypoint.h"
 #include "handwriting_path_generator.h"
+#include "stroke_renderer.h"
 #include <algorithm>
 #include <array>
 #include <limits>
@@ -205,12 +206,23 @@ int main()
     Model paperModel("../resources/plane.obj");
     paperModel.ignoreShadow = true;
 
+    float floorY = 0.0f;
+    float paperThicknessOffset = 0.001f;
+    bool lockPaperToFloor = true;
+
     // Add entities to scene.
     Scene scene;
-    glm::mat4 planeWorldTransform = glm::mat4(1.0f);
-    planeWorldTransform = glm::scale(planeWorldTransform, glm::vec3(planeSize));
-    planeWorldTransform = glm::translate(glm::vec3(0.0f, -0.5f, 0.0f)) * planeWorldTransform;
-    scene.addEntity(new Entity(&groundModel, planeWorldTransform));
+    auto makeGroundPlaneTransform = [&]() {
+        glm::mat4 planeWorldTransform = glm::mat4(1.0f);
+        planeWorldTransform = glm::scale(planeWorldTransform, glm::vec3(planeSize));
+        planeWorldTransform = glm::translate(glm::vec3(0.0f, floorY, 0.0f)) * planeWorldTransform;
+        return planeWorldTransform;
+    };
+    Entity* groundEntity = new Entity(&groundModel, makeGroundPlaneTransform());
+    scene.addEntity(groundEntity);
+    auto updateGroundPlane = [&]() {
+        groundEntity->modelMatrix = makeGroundPlaneTransform();
+    };
 
     const char* pandaLinkPaths[] = {
         "../resources/robot_arm/franka_description/meshes/visual/link0.dae",
@@ -292,7 +304,7 @@ int main()
         initialToolTipPosition.z
     );
     handwritingOptions.scale = 0.15f;
-    handwritingOptions.paperY = initialToolTipPosition.y - 0.03f;
+    handwritingOptions.paperY = floorY + paperThicknessOffset;
     handwritingOptions.liftHeight = 0.05f;
     handwritingOptions.sampleSpacing = 0.01f;
     handwritingOptions.useSpline = true;
@@ -302,9 +314,18 @@ int main()
     TrajectoryTracker trajectoryTracker;
     trajectoryTracker.setWaypoints(activeWaypoints);
     trajectoryTracker.reset(initialToolTipPosition);
+    StrokeRenderer strokeRenderer;
+    bool enableStrokeRendering = false;
+    const char* strokeRenderModeItems[] = { "Line Strip", "Image Brush Stamp" };
     Entity* paperEntity = new Entity(&paperModel, glm::mat4(1.0f));
     scene.addEntity(paperEntity);
+    auto syncPaperYToFloor = [&]() {
+        if (lockPaperToFloor) {
+            handwritingOptions.paperY = floorY + paperThicknessOffset;
+        }
+    };
     auto updatePaperPlane = [&]() {
+        syncPaperYToFloor();
         paperEntity->modelMatrix =
             glm::translate(glm::vec3(
                 handwritingOptions.paperOrigin.x,
@@ -312,6 +333,7 @@ int main()
                 handwritingOptions.paperOrigin.z
             ))
             * glm::scale(glm::vec3(0.75f, 1.0f, 0.55f));
+        strokeRenderer.setPaperY(handwritingOptions.paperY);
     };
     auto getTrajectoryPenDown = [&]() {
         return enableWaypointPlayback
@@ -321,6 +343,7 @@ int main()
             && trajectoryTracker.getCurrentWaypoint().penDown;
     };
     auto reloadActivePath = [&]() {
+        syncPaperYToFloor();
         if (pathMode == 0) {
             activeWaypoints = testWaypoints;
         } else {
@@ -428,6 +451,9 @@ int main()
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
+        if (lockPaperToFloor && handwritingOptions.paperY != floorY + paperThicknessOffset) {
+            updatePaperPlane();
+        }
 
         // Joint control window
         ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Once);
@@ -479,7 +505,22 @@ int main()
         if (ImGui::SliderFloat("Sample Spacing", &handwritingOptions.sampleSpacing, 0.005f, 0.030f)) {
             reloadActivePath();
         }
-        if (ImGui::SliderFloat("Paper Y", &handwritingOptions.paperY, -1.0f, 2.0f)) {
+        if (ImGui::Checkbox("Lock Paper To Floor", &lockPaperToFloor)) {
+            updatePaperPlane();
+            reloadActivePath();
+        }
+        if (ImGui::SliderFloat("Floor Y", &floorY, -1.0f, 1.0f)) {
+            updateGroundPlane();
+            updatePaperPlane();
+            reloadActivePath();
+        }
+        if (ImGui::SliderFloat("Paper Thickness Offset", &paperThicknessOffset, 0.0f, 0.02f)) {
+            updatePaperPlane();
+            reloadActivePath();
+        }
+        if (lockPaperToFloor) {
+            ImGui::Text("Paper Y locked to floor");
+        } else if (ImGui::SliderFloat("Paper Y", &handwritingOptions.paperY, -1.0f, 2.0f)) {
             updatePaperPlane();
             reloadActivePath();
         }
@@ -508,7 +549,13 @@ int main()
         ImGui::Text("Current Path Mode: %s", pathModeItems[pathMode]);
         ImGui::Text("Use Spline: %s", handwritingOptions.useSpline ? "true" : "false");
         ImGui::Text("Generated Waypoint Count: %d", trajectoryTracker.getWaypointCount());
+        ImGui::Text("Floor Y: %.4f", floorY);
+        ImGui::Text("Paper Thickness Offset: %.4f", paperThicknessOffset);
         ImGui::Text("Paper Y: %.4f", handwritingOptions.paperY);
+        ImGui::Text(
+            "Paper Attached To Floor: %s",
+            lockPaperToFloor ? "true" : "manual"
+        );
         ImGui::Text("Lift Height: %.4f", handwritingOptions.liftHeight);
         ImGui::Text(
             "Paper Origin: x %.4f, z %.4f",
@@ -524,6 +571,28 @@ int main()
             robotKinematics.setToolTipLocalOffset(toolTipLocalOffset);
         }
 
+        ImGui::Separator();
+        ImGui::Checkbox("Enable Stroke Rendering", &enableStrokeRendering);
+        if (ImGui::Button("Clear Stroke")) {
+            strokeRenderer.clear();
+        }
+        int strokeRenderMode = static_cast<int>(strokeRenderer.getRenderMode());
+        if (ImGui::Combo("Stroke Render Mode", &strokeRenderMode, strokeRenderModeItems, 2)) {
+            strokeRenderer.setRenderMode(static_cast<StrokeRenderMode>(strokeRenderMode));
+        }
+        ImGui::Text("Brush Texture Path: %s", strokeRenderer.getBrushTexturePath().c_str());
+        float strokeBrushSize = strokeRenderer.getBrushSize();
+        if (ImGui::SliderFloat("Brush Size", &strokeBrushSize, 0.005f, 0.080f)) {
+            strokeRenderer.setBrushSize(strokeBrushSize);
+        }
+        float strokeOpacity = strokeRenderer.getOpacity();
+        if (ImGui::SliderFloat("Opacity", &strokeOpacity, 0.05f, 1.0f)) {
+            strokeRenderer.setOpacity(strokeOpacity);
+        }
+        float stampSpacing = strokeRenderer.getStampSpacing();
+        if (ImGui::SliderFloat("Stamp Spacing", &stampSpacing, 0.002f, 0.060f)) {
+            strokeRenderer.setStampSpacing(stampSpacing);
+        }
         ImGui::Separator();
         if (ImGui::Checkbox("Enable Waypoint Playback", &enableWaypointPlayback)) {
             if (enableWaypointPlayback) {
@@ -565,6 +634,10 @@ int main()
         const glm::vec3 endEffectorPosition = robotKinematics.getEndEffectorPosition();
         const glm::vec3 toolTipPosition = robotKinematics.getToolTipPosition();
         const bool currentPenDown = getTrajectoryPenDown();
+        strokeRenderer.updateStroke(
+            toolTipPosition,
+            enableStrokeRendering && currentPenDown
+        );
         const bool hasCurrentWaypointForDebug = trajectoryTracker.getWaypointCount() > 0
             && trajectoryTracker.getCurrentWaypointIndex() < trajectoryTracker.getWaypointCount();
         const bool currentWaypointPenDown = hasCurrentWaypointForDebug
@@ -586,6 +659,9 @@ int main()
         ImGui::Text("z: %.4f", toolTipPosition.z);
         ImGui::Text("Tool Tip Height Above Paper: %.4f", toolTipPosition.y - handwritingOptions.paperY);
         ImGui::Text("Playback penDown: %s", currentPenDown ? "true" : "false");
+        ImGui::Text("Stroke Point Count: %d", strokeRenderer.getStrokePointCount());
+        ImGui::Text("Stroke Segment Count: %d", strokeRenderer.getStrokeSegmentCount());
+        ImGui::Text("Stamp Count: %d", strokeRenderer.getStampCount());
         if (pathMode == 1) {
             ImGui::Text("Expected Current Waypoint Y: %.4f", expectedWaypointY);
         } else {
@@ -663,6 +739,7 @@ int main()
 
         glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, CAMERA_NEAR_PLANE, CAMERA_FAR_PLANE);
         glm::mat4 view = camera.GetViewMatrix();
+        const glm::mat4 sceneView = view;
         std::array<float, CSM_CASCADE_COUNT> cascadeFarPlanes = { 12.0f, 36.0f, CAMERA_FAR_PLANE };
         std::array<glm::mat4, CSM_CASCADE_COUNT> lightSpaceMatrices;
         const unsigned int activeCascadeCount = useCSM ? CSM_CASCADE_COUNT : 1;
@@ -777,6 +854,10 @@ int main()
 
         glBindVertexArray(0);
         glDepthFunc(GL_LESS);
+
+        if (enableStrokeRendering) {
+            strokeRenderer.render(sceneView, projection);
+        }
 
         // Render ImGui
         ImGui::Render();
