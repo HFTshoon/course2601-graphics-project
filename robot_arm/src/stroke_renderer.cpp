@@ -21,6 +21,10 @@ StrokeRenderer::StrokeRenderer()
       opacity_(0.9f),
       strokeColor_(0.02f, 0.018f, 0.015f),
       stampSpacing_(0.012f),
+      paperOpacityMultiplier_(1.0f),
+      paperStampSizeMultiplier_(1.0f),
+      paperEdgeNoiseStrength_(0.0f),
+      paperFiberNoise_(0.0f),
       paperY_(0.0f),
       paperEpsilon_(0.003f),
       minPointSpacing_(0.002f),
@@ -166,6 +170,18 @@ void StrokeRenderer::setStampSpacing(float spacing)
 float StrokeRenderer::getStampSpacing() const
 {
     return stampSpacing_;
+}
+
+void StrokeRenderer::setPaperInfluence(
+    float opacityMultiplier,
+    float sizeMultiplier,
+    float edgeNoiseStrength,
+    float fiberNoise)
+{
+    paperOpacityMultiplier_ = std::max(0.0f, opacityMultiplier);
+    paperStampSizeMultiplier_ = std::max(0.1f, sizeMultiplier);
+    paperEdgeNoiseStrength_ = std::max(0.0f, std::min(1.0f, edgeNoiseStrength));
+    paperFiberNoise_ = std::max(0.0f, std::min(1.0f, fiberNoise));
 }
 
 void StrokeRenderer::setPaperY(float paperY)
@@ -374,9 +390,11 @@ unsigned int StrokeRenderer::compileBrushShaderProgram() const
         "uniform mat4 view;\n"
         "uniform mat4 projection;\n"
         "out vec2 TexCoord;\n"
+        "out vec3 WorldPosition;\n"
         "void main()\n"
         "{\n"
         "    TexCoord = aTexCoord;\n"
+        "    WorldPosition = aPosition;\n"
         "    gl_Position = projection * view * vec4(aPosition, 1.0);\n"
         "}\n";
     const char* fallbackFragment =
@@ -386,10 +404,33 @@ unsigned int StrokeRenderer::compileBrushShaderProgram() const
         "uniform sampler2D brushTexture;\n"
         "uniform float opacity;\n"
         "uniform vec3 strokeColor;\n"
+        "uniform float edgeNoiseStrength;\n"
+        "uniform float fiberNoise;\n"
+        "in vec3 WorldPosition;\n"
+        "float hash21(vec2 p)\n"
+        "{\n"
+        "    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);\n"
+        "}\n"
+        "float valueNoise(vec2 p)\n"
+        "{\n"
+        "    vec2 i = floor(p);\n"
+        "    vec2 f = fract(p);\n"
+        "    f = f * f * (3.0 - 2.0 * f);\n"
+        "    float a = hash21(i);\n"
+        "    float b = hash21(i + vec2(1.0, 0.0));\n"
+        "    float c = hash21(i + vec2(0.0, 1.0));\n"
+        "    float d = hash21(i + vec2(1.0, 1.0));\n"
+        "    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);\n"
+        "}\n"
         "void main()\n"
         "{\n"
         "    vec4 tex = texture(brushTexture, TexCoord);\n"
-        "    float alpha = tex.a * opacity;\n"
+        "    float edgeMask = 1.0 - smoothstep(0.22, 0.86, tex.a);\n"
+        "    float edgeNoise = valueNoise(WorldPosition.xz * 95.0);\n"
+        "    float fiber = valueNoise(vec2(WorldPosition.x * 28.0, WorldPosition.z * 170.0));\n"
+        "    float edgeVariation = mix(1.0, 0.52 + 0.74 * edgeNoise, edgeNoiseStrength * edgeMask);\n"
+        "    float fiberVariation = mix(1.0, 0.78 + 0.32 * fiber, fiberNoise);\n"
+        "    float alpha = tex.a * opacity * edgeVariation * fiberVariation;\n"
         "    if (alpha < 0.01) discard;\n"
         "    FragColor = vec4(strokeColor, alpha);\n"
         "}\n";
@@ -534,7 +575,7 @@ void StrokeRenderer::renderLineStrips(const glm::mat4& view, const glm::mat4& pr
         strokeColor_.r,
         strokeColor_.g,
         strokeColor_.b,
-        opacity_
+        std::min(1.0f, opacity_ * paperOpacityMultiplier_)
     );
 
     glBindVertexArray(lineVao_);
@@ -584,7 +625,7 @@ void StrokeRenderer::renderBrushStamps(const glm::mat4& view, const glm::mat4& p
 
     for (size_t stampIndex = 0; stampIndex < brushStamps_.size(); ++stampIndex) {
         const BrushStamp& stamp = brushStamps_[stampIndex];
-        const float halfSize = stamp.size * 0.5f;
+        const float halfSize = stamp.size * paperStampSizeMultiplier_ * 0.5f;
         const glm::vec3& c = stamp.position;
         const float vertices[] = {
             c.x - halfSize, c.y, c.z - halfSize, 0.0f, 0.0f,
@@ -595,13 +636,18 @@ void StrokeRenderer::renderBrushStamps(const glm::mat4& view, const glm::mat4& p
             c.x - halfSize, c.y, c.z + halfSize, 0.0f, 1.0f
         };
 
-        glUniform1f(glGetUniformLocation(stampShaderProgram_, "opacity"), stamp.opacity);
+        glUniform1f(
+            glGetUniformLocation(stampShaderProgram_, "opacity"),
+            std::min(1.0f, stamp.opacity * paperOpacityMultiplier_)
+        );
         glUniform3f(
             glGetUniformLocation(stampShaderProgram_, "strokeColor"),
             stamp.color.r,
             stamp.color.g,
             stamp.color.b
         );
+        glUniform1f(glGetUniformLocation(stampShaderProgram_, "edgeNoiseStrength"), paperEdgeNoiseStrength_);
+        glUniform1f(glGetUniformLocation(stampShaderProgram_, "fiberNoise"), paperFiberNoise_);
         glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW);
         glDrawArrays(GL_TRIANGLES, 0, 6);
     }

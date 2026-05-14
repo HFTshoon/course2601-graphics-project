@@ -7,9 +7,11 @@ uniform mat4 view;
 uniform mat4 projection;
 
 out vec2 TexCoord;
+out vec3 WorldPosition;
 
 void main()
 {
     TexCoord = aTexCoord;
+    WorldPosition = aPosition;
     gl_Position = projection * view * vec4(aPosition, 1.0);
 }

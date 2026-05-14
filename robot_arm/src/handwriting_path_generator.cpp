@@ -1,6 +1,7 @@
 #include "handwriting_path_generator.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 
 #include <glm/geometric.hpp>
@@ -11,29 +12,10 @@
 std::vector<Waypoint> HandwritingPathGenerator::generateLowercaseA(const Options& options) const
 {
     std::vector<Waypoint> waypoints;
-
-    std::vector<glm::vec2> loopStroke;
-    const glm::vec2 loopCenter(-0.12f, -0.05f);
-    const float radiusX = 0.45f;
-    const float radiusY = 0.55f;
-    const int loopControlCount = 12;
-    for (int i = 0; i < loopControlCount; ++i) {
-        const float t = static_cast<float>(i) / static_cast<float>(loopControlCount);
-        const float angle = glm::two_pi<float>() * t;
-        loopStroke.push_back(glm::vec2(
-            loopCenter.x + radiusX * std::cos(angle),
-            loopCenter.y + radiusY * std::sin(angle)
-        ));
+    GlyphDefinition glyphDefinition;
+    if (buildGlyphDefinition('a', glyphDefinition)) {
+        appendGlyph(glyphDefinition, options, waypoints);
     }
-    appendStroke(loopStroke, options, waypoints, true);
-
-    std::vector<glm::vec2> stemStroke;
-    stemStroke.push_back(glm::vec2(0.34f, 0.50f));
-    stemStroke.push_back(glm::vec2(0.42f, 0.18f));
-    stemStroke.push_back(glm::vec2(0.39f, -0.34f));
-    stemStroke.push_back(glm::vec2(0.44f, -0.58f));
-    stemStroke.push_back(glm::vec2(0.62f, -0.68f));
-    appendStroke(stemStroke, options, waypoints, false);
 
     if (!waypoints.empty()) {
         const glm::vec3 lastPosition = waypoints.back().position;
@@ -44,6 +26,155 @@ std::vector<Waypoint> HandwritingPathGenerator::generateLowercaseA(const Options
     }
 
     return waypoints;
+}
+
+std::vector<Waypoint> HandwritingPathGenerator::generateText(
+    const std::string& text,
+    const Options& options) const
+{
+    std::vector<Waypoint> waypoints;
+    lastUnsupportedCharacterCount_ = 0;
+
+    float cursorX = 0.0f;
+    for (size_t characterIndex = 0; characterIndex < text.size(); ++characterIndex) {
+        const unsigned char rawCharacter = static_cast<unsigned char>(text[characterIndex]);
+        const char character = static_cast<char>(std::tolower(rawCharacter));
+
+        if (character == ' ') {
+            cursorX += options.wordSpacing;
+            continue;
+        }
+
+        GlyphDefinition glyphDefinition;
+        if (!buildGlyphDefinition(character, glyphDefinition)) {
+            ++lastUnsupportedCharacterCount_;
+            continue;
+        }
+
+        Options glyphOptions = options;
+        glyphOptions.paperOrigin.x = options.paperOrigin.x + cursorX;
+        appendGlyph(glyphDefinition, glyphOptions, waypoints);
+        cursorX += options.scale * glyphDefinition.advance + options.characterSpacing;
+    }
+
+    if (!waypoints.empty()) {
+        const glm::vec3 lastPosition = waypoints.back().position;
+        waypoints.push_back(Waypoint(
+            glm::vec3(lastPosition.x, options.paperY + options.liftHeight, lastPosition.z),
+            false
+        ));
+    }
+
+    return waypoints;
+}
+
+int HandwritingPathGenerator::getLastUnsupportedCharacterCount() const
+{
+    return lastUnsupportedCharacterCount_;
+}
+
+bool HandwritingPathGenerator::buildGlyphDefinition(
+    char character,
+    GlyphDefinition& glyphDefinition)
+{
+    glyphDefinition.strokes.clear();
+    glyphDefinition.advance = 1.15f;
+
+    if (character == 'a') {
+        GlyphStroke loopStroke;
+        loopStroke.closed = true;
+        const glm::vec2 loopCenter(-0.12f, -0.05f);
+        const float radiusX = 0.45f;
+        const float radiusY = 0.55f;
+        const int loopControlCount = 12;
+        for (int i = 0; i < loopControlCount; ++i) {
+            const float t = static_cast<float>(i) / static_cast<float>(loopControlCount);
+            const float angle = glm::two_pi<float>() * t;
+            loopStroke.points.push_back(glm::vec2(
+                loopCenter.x + radiusX * std::cos(angle),
+                loopCenter.y + radiusY * std::sin(angle)
+            ));
+        }
+        glyphDefinition.strokes.push_back(loopStroke);
+
+        GlyphStroke stemStroke;
+        stemStroke.closed = false;
+        stemStroke.points.push_back(glm::vec2(0.34f, 0.50f));
+        stemStroke.points.push_back(glm::vec2(0.42f, 0.18f));
+        stemStroke.points.push_back(glm::vec2(0.39f, -0.34f));
+        stemStroke.points.push_back(glm::vec2(0.44f, -0.58f));
+        stemStroke.points.push_back(glm::vec2(0.62f, -0.68f));
+        glyphDefinition.strokes.push_back(stemStroke);
+        glyphDefinition.advance = 1.18f;
+        return true;
+    }
+
+    if (character == 'b') {
+        GlyphStroke stemStroke;
+        stemStroke.closed = false;
+        stemStroke.points.push_back(glm::vec2(-0.42f, 0.72f));
+        stemStroke.points.push_back(glm::vec2(-0.42f, 0.28f));
+        stemStroke.points.push_back(glm::vec2(-0.42f, -0.22f));
+        stemStroke.points.push_back(glm::vec2(-0.42f, -0.70f));
+        glyphDefinition.strokes.push_back(stemStroke);
+
+        GlyphStroke bowlStroke;
+        bowlStroke.closed = true;
+        const glm::vec2 bowlCenter(-0.05f, -0.16f);
+        const float bowlRadiusX = 0.40f;
+        const float bowlRadiusY = 0.48f;
+        const int bowlControlCount = 12;
+        for (int i = 0; i < bowlControlCount; ++i) {
+            const float t = static_cast<float>(i) / static_cast<float>(bowlControlCount);
+            const float angle = glm::two_pi<float>() * t;
+            bowlStroke.points.push_back(glm::vec2(
+                bowlCenter.x + bowlRadiusX * std::cos(angle),
+                bowlCenter.y + bowlRadiusY * std::sin(angle)
+            ));
+        }
+        glyphDefinition.strokes.push_back(bowlStroke);
+        glyphDefinition.advance = 1.12f;
+        return true;
+    }
+
+    if (character == 'c') {
+        GlyphStroke arcStroke;
+        arcStroke.closed = false;
+        const glm::vec2 arcCenter(0.02f, -0.06f);
+        const float radiusX = 0.48f;
+        const float radiusY = 0.58f;
+        const int arcControlCount = 12;
+        const float startAngle = glm::radians(46.0f);
+        const float endAngle = glm::radians(314.0f);
+        for (int i = 0; i < arcControlCount; ++i) {
+            const float t = static_cast<float>(i) / static_cast<float>(arcControlCount - 1);
+            const float angle = startAngle + (endAngle - startAngle) * t;
+            arcStroke.points.push_back(glm::vec2(
+                arcCenter.x + radiusX * std::cos(angle),
+                arcCenter.y + radiusY * std::sin(angle)
+            ));
+        }
+        glyphDefinition.strokes.push_back(arcStroke);
+        glyphDefinition.advance = 1.08f;
+        return true;
+    }
+
+    return false;
+}
+
+void HandwritingPathGenerator::appendGlyph(
+    const GlyphDefinition& glyphDefinition,
+    const Options& options,
+    std::vector<Waypoint>& waypoints)
+{
+    for (size_t strokeIndex = 0; strokeIndex < glyphDefinition.strokes.size(); ++strokeIndex) {
+        appendStroke(
+            glyphDefinition.strokes[strokeIndex].points,
+            options,
+            waypoints,
+            glyphDefinition.strokes[strokeIndex].closed
+        );
+    }
 }
 
 glm::vec3 HandwritingPathGenerator::localToWorld(

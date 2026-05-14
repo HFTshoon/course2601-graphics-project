@@ -26,6 +26,7 @@
 #include "handwriting_path_generator.h"
 #include "stroke_renderer.h"
 #include "pen_preset.h"
+#include "paper_preset.h"
 #include <algorithm>
 #include <array>
 #include <limits>
@@ -310,7 +311,9 @@ int main()
     handwritingOptions.sampleSpacing = 0.01f;
     handwritingOptions.useSpline = true;
     int pathMode = 0;
-    const char* pathModeItems[] = { "Test Waypoints", "Lowercase a" };
+    const char* pathModeItems[] = { "Test Waypoints", "Lowercase a", "Text Input" };
+    char handwritingTextInput[128] = "abc";
+    int unsupportedCharacterCount = 0;
     std::vector<Waypoint> activeWaypoints = testWaypoints;
     TrajectoryTracker trajectoryTracker;
     trajectoryTracker.setWaypoints(activeWaypoints);
@@ -332,6 +335,43 @@ int main()
     };
     if (!penPresets.empty()) {
         applyPenPreset(penPresets[selectedPenPreset]);
+    }
+    std::vector<PaperPreset> paperPresets = createDefaultPaperPresets();
+    std::vector<const char*> paperPresetNames;
+    std::vector<Texture*> paperPresetTextures;
+    for (size_t presetIndex = 0; presetIndex < paperPresets.size(); ++presetIndex) {
+        paperPresetNames.push_back(paperPresets[presetIndex].name.c_str());
+        paperPresetTextures.push_back(new Texture(paperPresets[presetIndex].albedoTexturePath.c_str()));
+    }
+    int selectedPaperPreset = 0;
+    PaperPreset activePaperPreset = paperPresets.empty() ? PaperPreset() : paperPresets[selectedPaperPreset];
+    auto applyPaperInfluence = [&]() {
+        const float effectiveOpacityMultiplier =
+            activePaperPreset.strokeOpacityMultiplier * (1.0f - activePaperPreset.absorbency * 0.05f);
+        const float effectiveStampSizeMultiplier =
+            activePaperPreset.stampSizeMultiplier * (1.0f + activePaperPreset.absorbency * 0.04f);
+        const float effectiveEdgeNoiseStrength =
+            std::min(1.0f, activePaperPreset.edgeNoiseStrength + activePaperPreset.roughness * 0.08f);
+        strokeRenderer.setPaperInfluence(
+            effectiveOpacityMultiplier,
+            effectiveStampSizeMultiplier,
+            effectiveEdgeNoiseStrength,
+            activePaperPreset.fiberNoise
+        );
+    };
+    auto applyPaperPreset = [&](int presetIndex) {
+        if (presetIndex < 0 || presetIndex >= static_cast<int>(paperPresets.size())) {
+            return;
+        }
+        selectedPaperPreset = presetIndex;
+        activePaperPreset = paperPresets[selectedPaperPreset];
+        if (selectedPaperPreset < static_cast<int>(paperPresetTextures.size())) {
+            paperModel.diffuse = paperPresetTextures[selectedPaperPreset];
+        }
+        applyPaperInfluence();
+    };
+    if (!paperPresets.empty()) {
+        applyPaperPreset(selectedPaperPreset);
     }
     const char* strokeRenderModeItems[] = { "Line Strip", "Image Brush Stamp" };
     Entity* paperEntity = new Entity(&paperModel, glm::mat4(1.0f));
@@ -363,8 +403,13 @@ int main()
         syncPaperYToFloor();
         if (pathMode == 0) {
             activeWaypoints = testWaypoints;
-        } else {
+            unsupportedCharacterCount = 0;
+        } else if (pathMode == 1) {
             activeWaypoints = handwritingGenerator.generateLowercaseA(handwritingOptions);
+            unsupportedCharacterCount = 0;
+        } else {
+            activeWaypoints = handwritingGenerator.generateText(handwritingTextInput, handwritingOptions);
+            unsupportedCharacterCount = handwritingGenerator.getLastUnsupportedCharacterCount();
         }
         trajectoryTracker.setWaypoints(activeWaypoints);
         trajectoryTracker.reset(robotKinematics.getToolTipPosition());
@@ -510,7 +555,7 @@ int main()
         }
 
         ImGui::Separator();
-        if (ImGui::Combo("Path Mode", &pathMode, pathModeItems, 2)) {
+        if (ImGui::Combo("Path Mode", &pathMode, pathModeItems, 3)) {
             reloadActivePath();
         }
         if (ImGui::Checkbox("Use Spline", &handwritingOptions.useSpline)) {
@@ -521,6 +566,21 @@ int main()
         }
         if (ImGui::SliderFloat("Sample Spacing", &handwritingOptions.sampleSpacing, 0.005f, 0.030f)) {
             reloadActivePath();
+        }
+        if (pathMode == 2) {
+            ImGui::InputText("Text Input", handwritingTextInput, sizeof(handwritingTextInput));
+            if (ImGui::SliderFloat("Character Spacing", &handwritingOptions.characterSpacing, 0.0f, 0.12f)) {
+                reloadActivePath();
+            }
+            if (ImGui::SliderFloat("Word Spacing", &handwritingOptions.wordSpacing, 0.03f, 0.40f)) {
+                reloadActivePath();
+            }
+            if (ImGui::Button("Generate Text Path")) {
+                reloadActivePath();
+            }
+            ImGui::Text("Current Text: %s", handwritingTextInput);
+            ImGui::Text("Supported Glyphs: a, b, c, space");
+            ImGui::Text("Unsupported Character Count: %d", unsupportedCharacterCount);
         }
         if (ImGui::Checkbox("Lock Paper To Floor", &lockPaperToFloor)) {
             updatePaperPlane();
@@ -566,6 +626,9 @@ int main()
         ImGui::Text("Current Path Mode: %s", pathModeItems[pathMode]);
         ImGui::Text("Use Spline: %s", handwritingOptions.useSpline ? "true" : "false");
         ImGui::Text("Generated Waypoint Count: %d", trajectoryTracker.getWaypointCount());
+        if (pathMode == 2) {
+            ImGui::Text("Text Path Unsupported Characters: %d", unsupportedCharacterCount);
+        }
         ImGui::Text("Floor Y: %.4f", floorY);
         ImGui::Text("Paper Thickness Offset: %.4f", paperThicknessOffset);
         ImGui::Text("Paper Y: %.4f", handwritingOptions.paperY);
@@ -579,6 +642,52 @@ int main()
             handwritingOptions.paperOrigin.x,
             handwritingOptions.paperOrigin.z
         );
+        if (!paperPresets.empty()) {
+            if (ImGui::Combo(
+                    "Paper Preset",
+                    &selectedPaperPreset,
+                    &paperPresetNames[0],
+                    static_cast<int>(paperPresetNames.size()))) {
+                applyPaperPreset(selectedPaperPreset);
+            }
+            ImGui::Text("Current Paper Preset: %s", activePaperPreset.name.c_str());
+            ImGui::Text("Paper Texture Path: %s", activePaperPreset.albedoTexturePath.c_str());
+            float paperBaseColor[3] = {
+                activePaperPreset.baseColor.r,
+                activePaperPreset.baseColor.g,
+                activePaperPreset.baseColor.b
+            };
+            ImGui::ColorEdit3(
+                "Paper Base Color",
+                paperBaseColor,
+                ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoPicker
+            );
+            bool paperInfluenceChanged = false;
+            paperInfluenceChanged |= ImGui::SliderFloat("Paper Roughness", &activePaperPreset.roughness, 0.0f, 1.0f);
+            paperInfluenceChanged |= ImGui::SliderFloat("Paper Absorbency", &activePaperPreset.absorbency, 0.0f, 1.0f);
+            paperInfluenceChanged |= ImGui::SliderFloat("Paper Fiber Noise", &activePaperPreset.fiberNoise, 0.0f, 1.0f);
+            paperInfluenceChanged |= ImGui::SliderFloat(
+                "Stroke Opacity Multiplier",
+                &activePaperPreset.strokeOpacityMultiplier,
+                0.2f,
+                1.3f
+            );
+            paperInfluenceChanged |= ImGui::SliderFloat(
+                "Stamp Size Multiplier",
+                &activePaperPreset.stampSizeMultiplier,
+                0.6f,
+                1.6f
+            );
+            paperInfluenceChanged |= ImGui::SliderFloat(
+                "Edge Noise Strength",
+                &activePaperPreset.edgeNoiseStrength,
+                0.0f,
+                1.0f
+            );
+            if (paperInfluenceChanged) {
+                applyPaperInfluence();
+            }
+        }
         glm::vec3 toolTipLocalOffset = robotKinematics.getToolTipLocalOffset();
         bool toolTipOffsetChanged = false;
         toolTipOffsetChanged |= ImGui::SliderFloat("Tool Tip Offset X", &toolTipLocalOffset.x, -0.20f, 0.20f);

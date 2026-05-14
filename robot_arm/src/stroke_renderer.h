@@ -35,6 +35,13 @@ public:
     void setStampSpacing(float spacing);
     float getStampSpacing() const;
 
+    void setPaperInfluence(
+        float opacityMultiplier,
+        float sizeMultiplier,
+        float edgeNoiseStrength,
+        float fiberNoise
+    );
+
     void setPaperY(float paperY);
     float getPaperY() const;
 
@@ -85,6 +92,10 @@ private:
     float opacity_;
     glm::vec3 strokeColor_;
     float stampSpacing_;
+    float paperOpacityMultiplier_;
+    float paperStampSizeMultiplier_;
+    float paperEdgeNoiseStrength_;
+    float paperFiberNoise_;
     float paperY_;
     float paperEpsilon_;
     float minPointSpacing_;
