@@ -121,6 +121,21 @@ robot_arm/assets/papers/rough_paper.png
 robot_arm/assets/papers/recycled_paper.png
 ```
 
+## Brush Texture 교체
+
+Pen Preset은 stroke parameter를 결정하고, Brush Image selector는 실제 stamp에 사용할 PNG texture를 결정합니다. Pen Preset을 새로 선택하면 기본 brush image로 돌아가고, Brush Image combo에서 다른 PNG를 고르면 brush texture만 override됩니다.
+
+기본 mapping은 아래와 같습니다.
+
+```text
+Pencil:        robot_arm/assets/brushes/chalk.png
+Ballpoint Pen: robot_arm/assets/brushes/round.png
+Marker:        robot_arm/assets/brushes/blob.png
+Fallback:      robot_arm/assets/brushes/basic_circle.png
+```
+
+`robot_arm/assets/brushes/` 안의 PNG 파일은 Brush Image selector에서 사용할 수 있습니다. 다른 기본 brush를 쓰려면 [pen_preset.cpp](robot_arm/src/pen_preset.cpp)의 `brushTexturePath`를 바꾸면 됩니다. Brush image는 PNG, RGBA, transparent background를 권장합니다. 256x256 또는 512x512 정방형 brush tip이 가장 예측 가능하게 stamp됩니다. `square.png`, `rock.png`, `rakchalk.png`처럼 aspect ratio가 큰 이미지는 paper 위 quad에 찍힐 때 늘어나 보일 수 있습니다.
+
 ## 빌드 파일 정리
 
 빌드 산출물은 `robot_arm/build/` 아래에 생성됩니다. 이 디렉터리는 `.gitignore`에 포함되어 있으므로 새로 생성되는 빌드 파일은 git에 추가되지 않습니다.

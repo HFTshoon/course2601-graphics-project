@@ -47,6 +47,8 @@ public:
 
     void setBrushTexturePath(const std::string& path);
     const std::string& getBrushTexturePath() const;
+    const std::string& getLoadedBrushTexturePath() const;
+    bool isBrushTextureLoaded() const;
 
     int getStrokePointCount() const;
     int getStrokeSegmentCount() const;
@@ -102,8 +104,10 @@ private:
     int strokePointCount_;
 
     std::string brushTexturePath_;
+    std::string loadedBrushTexturePath_;
     unsigned int brushTextureID_;
     bool brushTextureInitialized_;
+    bool brushTextureLoadedFromFile_;
 
     unsigned int lineVao_;
     unsigned int lineVbo_;

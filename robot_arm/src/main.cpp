@@ -354,15 +354,76 @@ int main()
         penPresetNames.push_back(penPresets[presetIndex].name.c_str());
     }
     int selectedPenPreset = penPresets.size() > 1 ? 1 : 0;
-    auto applyPenPreset = [&](const PenPreset& preset) {
-        strokeRenderer.setBrushTexturePath(preset.brushTexturePath);
+    struct BrushAsset {
+        std::string fileName;
+        std::string texturePath;
+        int width = 0;
+        int height = 0;
+        int channels = 0;
+        bool exists = false;
+    };
+    auto brushFileNameFromPath = [](const std::string& path) {
+        const size_t slash = path.find_last_of("/\\");
+        if (slash == std::string::npos) {
+            return path;
+        }
+        return path.substr(slash + 1);
+    };
+    const char* brushFileNames[] = {
+        "basic_circle.png",
+        "blob.png",
+        "chalk.png",
+        "dot.png",
+        "oil.png",
+        "rakchalk.png",
+        "rock.png",
+        "round.png",
+        "square.png"
+    };
+    std::vector<BrushAsset> brushAssets;
+    std::vector<const char*> brushAssetNames;
+    for (size_t brushIndex = 0; brushIndex < sizeof(brushFileNames) / sizeof(brushFileNames[0]); ++brushIndex) {
+        BrushAsset asset;
+        asset.fileName = brushFileNames[brushIndex];
+        asset.texturePath = "../assets/brushes/" + asset.fileName;
+        asset.exists = stbi_info(
+            asset.texturePath.c_str(),
+            &asset.width,
+            &asset.height,
+            &asset.channels
+        ) != 0;
+        brushAssets.push_back(asset);
+    }
+    for (size_t brushIndex = 0; brushIndex < brushAssets.size(); ++brushIndex) {
+        brushAssetNames.push_back(brushAssets[brushIndex].fileName.c_str());
+    }
+    auto findBrushAssetIndexForPath = [&](const std::string& texturePath) {
+        const std::string fileName = brushFileNameFromPath(texturePath);
+        for (size_t brushIndex = 0; brushIndex < brushAssets.size(); ++brushIndex) {
+            if (brushAssets[brushIndex].texturePath == texturePath ||
+                brushAssets[brushIndex].fileName == fileName) {
+                return static_cast<int>(brushIndex);
+            }
+        }
+        return 0;
+    };
+    int selectedBrushImage = !penPresets.empty()
+        ? findBrushAssetIndexForPath(penPresets[selectedPenPreset].brushTexturePath)
+        : 0;
+    bool brushImageOverrideActive = false;
+    auto applyPenPreset = [&](const PenPreset& preset, int brushIndex) {
+        std::string brushTexturePath = preset.brushTexturePath;
+        if (brushIndex >= 0 && brushIndex < static_cast<int>(brushAssets.size())) {
+            brushTexturePath = brushAssets[brushIndex].texturePath;
+        }
+        strokeRenderer.setBrushTexturePath(brushTexturePath);
         strokeRenderer.setStrokeColor(preset.color);
         strokeRenderer.setBrushSize(preset.brushSize);
         strokeRenderer.setOpacity(preset.opacity);
         strokeRenderer.setStampSpacing(preset.stampSpacing);
     };
     if (!penPresets.empty()) {
-        applyPenPreset(penPresets[selectedPenPreset]);
+        applyPenPreset(penPresets[selectedPenPreset], selectedBrushImage);
     }
     std::vector<PaperPreset> paperPresets = createDefaultPaperPresets();
     std::vector<const char*> paperPresetNames;
@@ -1016,15 +1077,49 @@ int main()
                     &selectedPenPreset,
                     &penPresetNames[0],
                     static_cast<int>(penPresetNames.size()))) {
-                applyPenPreset(penPresets[selectedPenPreset]);
+                selectedBrushImage = findBrushAssetIndexForPath(penPresets[selectedPenPreset].brushTexturePath);
+                brushImageOverrideActive = false;
+                applyPenPreset(penPresets[selectedPenPreset], selectedBrushImage);
             }
             ImGui::Text("Selected Pen: %s", penPresets[selectedPenPreset].name.c_str());
+            ImGui::Text("Default Brush For Pen: %s", brushFileNameFromPath(penPresets[selectedPenPreset].brushTexturePath).c_str());
+            if (!brushAssets.empty()) {
+                if (ImGui::Combo(
+                        "Brush Image",
+                        &selectedBrushImage,
+                        &brushAssetNames[0],
+                        static_cast<int>(brushAssetNames.size()))) {
+                    brushImageOverrideActive =
+                        brushAssets[selectedBrushImage].fileName !=
+                        brushFileNameFromPath(penPresets[selectedPenPreset].brushTexturePath);
+                    applyPenPreset(penPresets[selectedPenPreset], selectedBrushImage);
+                }
+                const BrushAsset& selectedBrushAsset = brushAssets[selectedBrushImage];
+                ImGui::Text("Current Brush Image: %s", selectedBrushAsset.fileName.c_str());
+                ImGui::Text("Configured Pen Brush: %s", selectedBrushAsset.texturePath.c_str());
+                ImGui::Text("Brush Image Exists: %s", selectedBrushAsset.exists ? "true" : "missing");
+                ImGui::Text(
+                    "Brush Image Size: %d x %d, channels %d",
+                    selectedBrushAsset.width,
+                    selectedBrushAsset.height,
+                    selectedBrushAsset.channels
+                );
+                ImGui::Text("Brush Override Active: %s", brushImageOverrideActive ? "true" : "false");
+                if (selectedBrushAsset.exists && selectedBrushAsset.width != selectedBrushAsset.height) {
+                    ImGui::Text("Warning: selected brush image is non-square and may appear stretched.");
+                }
+            }
         }
         int strokeRenderMode = static_cast<int>(strokeRenderer.getRenderMode());
         if (ImGui::Combo("Stroke Render Mode", &strokeRenderMode, strokeRenderModeItems, 2)) {
             strokeRenderer.setRenderMode(static_cast<StrokeRenderMode>(strokeRenderMode));
         }
-        ImGui::Text("Brush Texture Path: %s", strokeRenderer.getBrushTexturePath().c_str());
+        ImGui::Text("Renderer Brush Texture Path: %s", strokeRenderer.getBrushTexturePath().c_str());
+        ImGui::Text("Loaded Brush Texture Path: %s", strokeRenderer.getLoadedBrushTexturePath().c_str());
+        ImGui::Text(
+            "Brush Texture Loaded: %s",
+            strokeRenderer.isBrushTextureLoaded() ? "true" : "procedural fallback"
+        );
         float strokeBrushSize = strokeRenderer.getBrushSize();
         if (ImGui::SliderFloat("Brush Size", &strokeBrushSize, 0.005f, 0.080f)) {
             strokeRenderer.setBrushSize(strokeBrushSize);

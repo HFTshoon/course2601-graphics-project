@@ -30,8 +30,10 @@ StrokeRenderer::StrokeRenderer()
       minPointSpacing_(0.002f),
       strokePointCount_(0),
       brushTexturePath_("../assets/brushes/basic_circle.png"),
+      loadedBrushTexturePath_(""),
       brushTextureID_(0),
       brushTextureInitialized_(false),
+      brushTextureLoadedFromFile_(false),
       lineVao_(0),
       lineVbo_(0),
       lineShaderProgram_(0),
@@ -197,20 +199,34 @@ float StrokeRenderer::getPaperY() const
 void StrokeRenderer::setBrushTexturePath(const std::string& path)
 {
     if (brushTexturePath_ == path) {
+        ensureBrushTexture();
         return;
     }
 
     brushTexturePath_ = path;
+    loadedBrushTexturePath_.clear();
     brushTextureInitialized_ = false;
+    brushTextureLoadedFromFile_ = false;
     if (brushTextureID_ != 0) {
         glDeleteTextures(1, &brushTextureID_);
         brushTextureID_ = 0;
     }
+    ensureBrushTexture();
 }
 
 const std::string& StrokeRenderer::getBrushTexturePath() const
 {
     return brushTexturePath_;
+}
+
+const std::string& StrokeRenderer::getLoadedBrushTexturePath() const
+{
+    return loadedBrushTexturePath_;
+}
+
+bool StrokeRenderer::isBrushTextureLoaded() const
+{
+    return brushTextureInitialized_ && brushTextureLoadedFromFile_;
 }
 
 int StrokeRenderer::getStrokePointCount() const
@@ -336,13 +352,28 @@ void StrokeRenderer::ensureBrushTexture()
         brushTextureID_ = 0;
     }
 
+    loadedBrushTexturePath_.clear();
+    brushTextureLoadedFromFile_ = false;
+
     brushTextureID_ = loadBrushTextureFromFile(brushTexturePath_);
+    if (brushTextureID_ != 0) {
+        loadedBrushTexturePath_ = brushTexturePath_;
+        brushTextureLoadedFromFile_ = true;
+    }
     const std::string fallbackBrushPath = "../assets/brushes/basic_circle.png";
     if (brushTextureID_ == 0 && brushTexturePath_ != fallbackBrushPath) {
         brushTextureID_ = loadBrushTextureFromFile(fallbackBrushPath);
+        if (brushTextureID_ != 0) {
+            loadedBrushTexturePath_ = fallbackBrushPath;
+            brushTextureLoadedFromFile_ = true;
+        }
     }
     if (brushTextureID_ == 0) {
         brushTextureID_ = createFallbackBrushTexture();
+        if (brushTextureID_ != 0) {
+            loadedBrushTexturePath_ = "procedural fallback brush";
+            brushTextureLoadedFromFile_ = false;
+        }
     }
 
     brushTextureInitialized_ = brushTextureID_ != 0;
