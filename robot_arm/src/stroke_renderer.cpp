@@ -27,6 +27,16 @@ StrokeRenderer::StrokeRenderer()
       paperFiberNoise_(0.0f),
       paperY_(0.0f),
       paperEpsilon_(0.003f),
+      paperNormalTextureID_(0),
+      paperRoughnessTextureID_(0),
+      paperOriginXZ_(0.0f),
+      paperSize_(1.0f, 1.0f),
+      paperUvScale_(1.0f),
+      paperMapStrokeModulationEnabled_(true),
+      roughnessInfluence_(0.3f),
+      normalInfluence_(0.15f),
+      paperNoiseScale_(60.0f),
+      flipNormalY_(false),
       minPointSpacing_(0.002f),
       strokePointCount_(0),
       brushTexturePath_("../assets/brushes/basic_circle.png"),
@@ -194,6 +204,36 @@ void StrokeRenderer::setPaperY(float paperY)
 float StrokeRenderer::getPaperY() const
 {
     return paperY_;
+}
+
+void StrokeRenderer::setPaperMaterialTextures(unsigned int normalTextureID, unsigned int roughnessTextureID)
+{
+    paperNormalTextureID_ = normalTextureID;
+    paperRoughnessTextureID_ = roughnessTextureID;
+}
+
+void StrokeRenderer::setPaperMapping(const glm::vec2& originXZ, const glm::vec2& size, float uvScale)
+{
+    paperOriginXZ_ = originXZ;
+    paperSize_ = glm::vec2(
+        std::max(0.001f, size.x),
+        std::max(0.001f, size.y)
+    );
+    paperUvScale_ = std::max(0.01f, uvScale);
+}
+
+void StrokeRenderer::setPaperMapStrokeModulation(
+    bool enabled,
+    float roughnessInfluence,
+    float normalInfluence,
+    float noiseScale,
+    bool flipNormalY)
+{
+    paperMapStrokeModulationEnabled_ = enabled;
+    roughnessInfluence_ = std::max(0.0f, std::min(1.0f, roughnessInfluence));
+    normalInfluence_ = std::max(0.0f, std::min(1.0f, normalInfluence));
+    paperNoiseScale_ = std::max(1.0f, noiseScale);
+    flipNormalY_ = flipNormalY;
 }
 
 void StrokeRenderer::setBrushTexturePath(const std::string& path)
@@ -648,9 +688,26 @@ void StrokeRenderer::renderBrushStamps(const glm::mat4& view, const glm::mat4& p
     glUniformMatrix4fv(glGetUniformLocation(stampShaderProgram_, "view"), 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(glGetUniformLocation(stampShaderProgram_, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
     glUniform1i(glGetUniformLocation(stampShaderProgram_, "brushTexture"), 0);
+    glUniform1i(glGetUniformLocation(stampShaderProgram_, "paperNormalMap"), 1);
+    glUniform1i(glGetUniformLocation(stampShaderProgram_, "paperRoughnessMap"), 2);
+    glUniform2f(glGetUniformLocation(stampShaderProgram_, "paperOriginXZ"), paperOriginXZ_.x, paperOriginXZ_.y);
+    glUniform2f(glGetUniformLocation(stampShaderProgram_, "paperSize"), paperSize_.x, paperSize_.y);
+    glUniform1f(glGetUniformLocation(stampShaderProgram_, "paperUvScale"), paperUvScale_);
+    glUniform1i(
+        glGetUniformLocation(stampShaderProgram_, "enablePaperMapModulation"),
+        paperMapStrokeModulationEnabled_ ? 1 : 0
+    );
+    glUniform1i(glGetUniformLocation(stampShaderProgram_, "flipNormalY"), flipNormalY_ ? 1 : 0);
+    glUniform1f(glGetUniformLocation(stampShaderProgram_, "roughnessInfluence"), roughnessInfluence_);
+    glUniform1f(glGetUniformLocation(stampShaderProgram_, "normalInfluence"), normalInfluence_);
+    glUniform1f(glGetUniformLocation(stampShaderProgram_, "paperNoiseScale"), paperNoiseScale_);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, brushTextureID_);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, paperNormalTextureID_);
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, paperRoughnessTextureID_);
     glBindVertexArray(stampVao_);
     glBindBuffer(GL_ARRAY_BUFFER, stampVbo_);
 

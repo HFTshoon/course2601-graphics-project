@@ -45,6 +45,16 @@ public:
     void setPaperY(float paperY);
     float getPaperY() const;
 
+    void setPaperMaterialTextures(unsigned int normalTextureID, unsigned int roughnessTextureID);
+    void setPaperMapping(const glm::vec2& originXZ, const glm::vec2& size, float uvScale);
+    void setPaperMapStrokeModulation(
+        bool enabled,
+        float roughnessInfluence,
+        float normalInfluence,
+        float noiseScale,
+        bool flipNormalY
+    );
+
     void setBrushTexturePath(const std::string& path);
     const std::string& getBrushTexturePath() const;
     const std::string& getLoadedBrushTexturePath() const;
@@ -100,6 +110,16 @@ private:
     float paperFiberNoise_;
     float paperY_;
     float paperEpsilon_;
+    unsigned int paperNormalTextureID_;
+    unsigned int paperRoughnessTextureID_;
+    glm::vec2 paperOriginXZ_;
+    glm::vec2 paperSize_;
+    float paperUvScale_;
+    bool paperMapStrokeModulationEnabled_;
+    float roughnessInfluence_;
+    float normalInfluence_;
+    float paperNoiseScale_;
+    bool flipNormalY_;
     float minPointSpacing_;
     int strokePointCount_;
 

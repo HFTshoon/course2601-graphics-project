@@ -206,6 +206,7 @@ int main()
     Shader lightingShader("../shaders/shader_lighting.vs", "../shaders/shader_lighting.fs"); // you can name your shader files however you like
     Shader shadowShader("../shaders/shadow.vs", "../shaders/shadow.fs");
     Shader skyboxShader("../shaders/shader_skybox.vs", "../shaders/shader_skybox.fs");
+    Shader paperShader("../shaders/paper_material.vs", "../shaders/paper_material.fs");
 
     Model groundModel("../resources/plane.obj");
     groundModel.diffuse = new Texture("../resources/rock_ground.png");
@@ -216,6 +217,16 @@ int main()
     float floorY = 0.0f;
     float paperThicknessOffset = 0.001f;
     bool lockPaperToFloor = true;
+    const glm::vec2 paperPlaneSize(0.75f, 0.55f);
+    bool usePaperMapShading = true;
+    float paperUvScale = 1.0f;
+    bool flipPaperNormalY = false;
+    float paperAmbientStrength = 0.35f;
+    float paperSpecularStrength = 0.14f;
+    bool enablePaperMapStrokeModulation = true;
+    float paperRoughnessInfluence = 0.30f;
+    float paperNormalInfluence = 0.15f;
+    float paperNoiseScale = 60.0f;
 
     // Add entities to scene.
     Scene scene;
@@ -429,7 +440,11 @@ int main()
     std::vector<const char*> paperPresetNames;
     struct PaperTextureBinding {
         Texture* texture = NULL;
+        unsigned int normalTextureID = 0;
+        unsigned int roughnessTextureID = 0;
         std::string loadedAlbedoPath;
+        std::string loadedNormalPath;
+        std::string loadedRoughnessPath;
         std::string fallbackAlbedoPath;
         bool structuredAlbedoExists = false;
         bool fallbackAlbedoExists = false;
@@ -438,6 +453,8 @@ int main()
         bool usingStructuredAlbedo = false;
         bool usingFallbackAlbedo = false;
         bool usingBaseColor = false;
+        bool usingNormalFallback = false;
+        bool usingRoughnessFallback = false;
     };
     auto fileExists = [](const std::string& path) {
         std::ifstream file(path.c_str(), std::ios::binary);
@@ -462,6 +479,51 @@ int main()
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
         return texture;
+    };
+    auto createSolidTextureID = [](const unsigned char* pixel, GLenum format, GLint internalFormat) {
+        unsigned int textureID = 0;
+        glGenTextures(1, &textureID);
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, 1, 1, 0, format, GL_UNSIGNED_BYTE, pixel);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        return textureID;
+    };
+    auto createFlatNormalTexture = [&]() {
+        const unsigned char flatNormal[3] = { 128, 128, 255 };
+        return createSolidTextureID(flatNormal, GL_RGB, GL_RGB);
+    };
+    auto createScalarRoughnessTexture = [&](float roughness) {
+        const unsigned char roughnessPixel[1] = {
+            static_cast<unsigned char>(std::max(0.0f, std::min(1.0f, roughness)) * 255.0f)
+        };
+        return createSolidTextureID(roughnessPixel, GL_RED, GL_RED);
+    };
+    auto loadTextureIDFromFile = [](const std::string& path, int desiredChannels, GLenum format, GLint internalFormat) {
+        int width = 0;
+        int height = 0;
+        int channels = 0;
+        stbi_set_flip_vertically_on_load(true);
+        unsigned char* pixels = stbi_load(path.c_str(), &width, &height, &channels, desiredChannels);
+        if (pixels == NULL) {
+            return 0u;
+        }
+
+        unsigned int textureID = 0;
+        glGenTextures(1, &textureID);
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, GL_UNSIGNED_BYTE, pixels);
+        glGenerateMipmap(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        stbi_image_free(pixels);
+        return textureID;
     };
     auto getPlaceholderPaperPath = [](const std::string& presetName) {
         if (presetName == "Rough Paper") {
@@ -492,6 +554,28 @@ int main()
             binding.texture = createSolidColorTexture(preset.baseColor);
             binding.loadedAlbedoPath = "baseColor fallback";
             binding.usingBaseColor = true;
+        }
+
+        if (binding.normalExists) {
+            binding.normalTextureID = loadTextureIDFromFile(preset.normalTexturePath, 3, GL_RGB, GL_RGB);
+        }
+        if (binding.normalTextureID != 0) {
+            binding.loadedNormalPath = preset.normalTexturePath;
+        } else {
+            binding.normalTextureID = createFlatNormalTexture();
+            binding.loadedNormalPath = "flat normal fallback";
+            binding.usingNormalFallback = true;
+        }
+
+        if (binding.roughnessExists) {
+            binding.roughnessTextureID = loadTextureIDFromFile(preset.roughnessTexturePath, 1, GL_RED, GL_RED);
+        }
+        if (binding.roughnessTextureID != 0) {
+            binding.loadedRoughnessPath = preset.roughnessTexturePath;
+        } else {
+            binding.roughnessTextureID = createScalarRoughnessTexture(preset.roughness);
+            binding.loadedRoughnessPath = "scalar roughness fallback";
+            binding.usingRoughnessFallback = true;
         }
 
         return binding;
@@ -525,6 +609,10 @@ int main()
         activePaperPreset = paperPresets[selectedPaperPreset];
         if (selectedPaperPreset < static_cast<int>(paperTextureBindings.size())) {
             paperModel.diffuse = paperTextureBindings[selectedPaperPreset].texture;
+            strokeRenderer.setPaperMaterialTextures(
+                paperTextureBindings[selectedPaperPreset].normalTextureID,
+                paperTextureBindings[selectedPaperPreset].roughnessTextureID
+            );
         }
         applyPaperInfluence();
     };
@@ -550,6 +638,11 @@ int main()
             ))
             * glm::scale(glm::vec3(0.75f, 1.0f, 0.55f));
         strokeRenderer.setPaperY(handwritingOptions.paperY);
+        strokeRenderer.setPaperMapping(
+            glm::vec2(handwritingOptions.paperOrigin.x, handwritingOptions.paperOrigin.z),
+            paperPlaneSize,
+            paperUvScale
+        );
     };
     auto getTrajectoryPenDown = [&]() {
         return enableWaypointPlayback
@@ -724,6 +817,11 @@ int main()
     lightingShader.setInt("depthMapSampler1", 4);
     lightingShader.setInt("depthMapSampler2", 5);
     lightingShader.setFloat("material.shininess", 64.f);    // set shininess to constant value.
+
+    paperShader.use();
+    paperShader.setInt("albedoMap", 0);
+    paperShader.setInt("normalMap", 1);
+    paperShader.setInt("roughnessMap", 2);
 
     skyboxShader.use();
     skyboxShader.setInt("skyboxTexture1", 0);
@@ -998,6 +1096,8 @@ int main()
             ImGui::Text("Roughness Texture Path: %s", activePaperPreset.roughnessTexturePath.c_str());
             if (activePaperTextureBinding) {
                 ImGui::Text("Loaded Paper Albedo: %s", activePaperTextureBinding->loadedAlbedoPath.c_str());
+                ImGui::Text("Loaded Paper Normal: %s", activePaperTextureBinding->loadedNormalPath.c_str());
+                ImGui::Text("Loaded Paper Roughness: %s", activePaperTextureBinding->loadedRoughnessPath.c_str());
                 ImGui::Text(
                     "Albedo Texture Loaded: %s",
                     activePaperTextureBinding->usingStructuredAlbedo ? "true" : "fallback"
@@ -1021,6 +1121,17 @@ int main()
                 }
             }
             ImGui::Text("NormalGL Warning: normal.png should be ambientCG NormalGL. NormalDX may flip the green channel.");
+            ImGui::Checkbox("Use Paper Normal/Roughness Shading", &usePaperMapShading);
+            if (ImGui::SliderFloat("Paper UV Scale", &paperUvScale, 0.25f, 8.0f)) {
+                updatePaperPlane();
+            }
+            ImGui::Checkbox("Flip Normal Y", &flipPaperNormalY);
+            ImGui::SliderFloat("Paper Ambient Strength", &paperAmbientStrength, 0.0f, 1.0f);
+            ImGui::SliderFloat("Paper Specular Strength", &paperSpecularStrength, 0.0f, 0.6f);
+            ImGui::Checkbox("Enable Paper Map Stroke Modulation", &enablePaperMapStrokeModulation);
+            ImGui::SliderFloat("Roughness Influence", &paperRoughnessInfluence, 0.0f, 1.0f);
+            ImGui::SliderFloat("Normal Influence", &paperNormalInfluence, 0.0f, 1.0f);
+            ImGui::SliderFloat("Paper Noise Scale", &paperNoiseScale, 5.0f, 220.0f);
             float paperBaseColor[3] = {
                 activePaperPreset.baseColor.r,
                 activePaperPreset.baseColor.g,
@@ -1182,6 +1293,18 @@ int main()
         const glm::vec3 endEffectorPosition = robotKinematics.getEndEffectorPosition();
         const glm::vec3 toolTipPosition = robotKinematics.getToolTipPosition();
         const bool currentPenDown = getTrajectoryPenDown();
+        strokeRenderer.setPaperMapping(
+            glm::vec2(handwritingOptions.paperOrigin.x, handwritingOptions.paperOrigin.z),
+            paperPlaneSize,
+            paperUvScale
+        );
+        strokeRenderer.setPaperMapStrokeModulation(
+            enablePaperMapStrokeModulation,
+            paperRoughnessInfluence,
+            paperNormalInfluence,
+            paperNoiseScale,
+            flipPaperNormalY
+        );
         strokeRenderer.updateStroke(
             toolTipPosition,
             enableStrokeRendering && currentPenDown
@@ -1358,6 +1481,9 @@ int main()
         // iterate with map<Model*, vector<Entity*>>::iterator it = scene.entities.begin()
         for (auto it = scene.entities.begin(); it != scene.entities.end(); it++) {
             Model* model = it->first;
+            if (model == &paperModel) {
+                continue;
+            }
             std::vector<Entity*> entities = it->second;
 
             glActiveTexture(GL_TEXTURE0);
@@ -1385,6 +1511,39 @@ int main()
                 glDrawElements(GL_TRIANGLES, model->mesh.indices.size(), GL_UNSIGNED_INT, 0);
                 glBindVertexArray(0);
             }
+        }
+
+        if (paperEntity && selectedPaperPreset >= 0 && selectedPaperPreset < static_cast<int>(paperTextureBindings.size())) {
+            const PaperTextureBinding& paperBinding = paperTextureBindings[selectedPaperPreset];
+            paperShader.use();
+            paperShader.setMat4("projection", projection);
+            paperShader.setMat4("view", sceneView);
+            paperShader.setMat4("world", paperEntity->getModelMatrix());
+            paperShader.setVec3("viewPos", camera.Position);
+            paperShader.setVec3("lightDir", sun.lightDir);
+            paperShader.setVec3("lightColor", sun.lightColor);
+            paperShader.setVec2(
+                "paperOriginXZ",
+                glm::vec2(handwritingOptions.paperOrigin.x, handwritingOptions.paperOrigin.z)
+            );
+            paperShader.setVec2("paperSize", paperPlaneSize);
+            paperShader.setFloat("paperUvScale", paperUvScale);
+            paperShader.setBool("usePaperMapShading", usePaperMapShading);
+            paperShader.setBool("flipNormalY", flipPaperNormalY);
+            paperShader.setFloat("ambientStrength", paperAmbientStrength);
+            paperShader.setFloat("specularStrength", paperSpecularStrength);
+            paperShader.setFloat("scalarRoughness", activePaperPreset.roughness);
+
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, paperModel.diffuse ? paperModel.diffuse->ID : Model::getFallbackWhiteTextureID());
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, paperBinding.normalTextureID);
+            glActiveTexture(GL_TEXTURE2);
+            glBindTexture(GL_TEXTURE_2D, paperBinding.roughnessTextureID);
+
+            paperModel.bind();
+            glDrawElements(GL_TRIANGLES, paperModel.mesh.indices.size(), GL_UNSIGNED_INT, 0);
+            glBindVertexArray(0);
         }
 
         // use skybox Shader
