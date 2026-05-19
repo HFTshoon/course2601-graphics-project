@@ -2,7 +2,8 @@
 
 std::vector<PenPreset> createDefaultPenPresets()
 {
-    const std::string basicBrushPath = "../assets/brushes/basic_circle.png";
+    const std::string basicBrushPath = "../assets/brushes/blob.png";
+    // const std::string basicBrushPath = "../assets/brushes/basic_circle.png";
 
     std::vector<PenPreset> presets;
     PenPreset pencil;
