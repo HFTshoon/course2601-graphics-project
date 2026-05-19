@@ -62,6 +62,21 @@ cd /data/Graphics_2026/course2601-graphics-project/robot_arm/build
 ./main
 ```
 
+## Hershey Glyph Library 생성
+
+Hershey-Fonts 기반 텍스트 경로를 앱에서 조합하려면, 먼저 glyph library JSON을 생성합니다.
+
+```bash
+cd robot_arm
+python scripts/generate_hershey_glyph_library.py --font futural --output assets/fonts/hershey_futural_glyphs.json
+```
+
+생성된 파일은 앱의 `Hershey Glyph Library Text` 모드에서 기본 경로로 사용할 수 있습니다.
+
+```text
+../assets/fonts/hershey_futural_glyphs.json
+```
+
 ## 빌드 파일 정리
 
 빌드 산출물은 `robot_arm/build/` 아래에 생성됩니다. 이 디렉터리는 `.gitignore`에 포함되어 있으므로 새로 생성되는 빌드 파일은 git에 추가되지 않습니다.

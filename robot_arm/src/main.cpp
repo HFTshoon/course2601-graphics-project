@@ -27,6 +27,8 @@
 #include "stroke_renderer.h"
 #include "pen_preset.h"
 #include "paper_preset.h"
+#include "hershey_path_loader.h"
+#include "hershey_glyph_library.h"
 #include <algorithm>
 #include <array>
 #include <limits>
@@ -311,9 +313,28 @@ int main()
     handwritingOptions.sampleSpacing = 0.01f;
     handwritingOptions.useSpline = true;
     int pathMode = 0;
-    const char* pathModeItems[] = { "Test Waypoints", "Lowercase a", "Text Input" };
+    const char* pathModeItems[] = {
+        "Test Waypoints",
+        "Lowercase a",
+        "Text Input Fallback",
+        "Hershey JSON",
+        "Hershey Glyph Library Text"
+    };
     char handwritingTextInput[128] = "abc";
+    char hersheyJsonPath[256] = "../assets/paths/example_hershey_text.json";
+    char glyphLibraryPath[256] = "../assets/fonts/hershey_futural_glyphs.json";
+    char glyphLibraryTextInput[128] = "hello";
     int unsupportedCharacterCount = 0;
+    HersheyPathLoader hersheyPathLoader;
+    HersheyPathLoader::LoadedPath loadedHersheyPath;
+    bool hasLoadedHersheyPath = false;
+    std::string hersheyLoadError;
+    int loadedHersheyWaypointCount = 0;
+    HersheyGlyphLibrary hersheyGlyphLibrary;
+    bool hasLoadedGlyphLibrary = false;
+    std::string glyphLibraryLoadError;
+    int glyphLibraryUnsupportedCount = 0;
+    int glyphLibraryWaypointCount = 0;
     std::vector<Waypoint> activeWaypoints = testWaypoints;
     TrajectoryTracker trajectoryTracker;
     trajectoryTracker.setWaypoints(activeWaypoints);
@@ -404,12 +425,53 @@ int main()
         if (pathMode == 0) {
             activeWaypoints = testWaypoints;
             unsupportedCharacterCount = 0;
+            loadedHersheyWaypointCount = 0;
+            glyphLibraryWaypointCount = 0;
+            glyphLibraryUnsupportedCount = 0;
         } else if (pathMode == 1) {
             activeWaypoints = handwritingGenerator.generateLowercaseA(handwritingOptions);
             unsupportedCharacterCount = 0;
-        } else {
+            loadedHersheyWaypointCount = 0;
+            glyphLibraryWaypointCount = 0;
+            glyphLibraryUnsupportedCount = 0;
+        } else if (pathMode == 2) {
             activeWaypoints = handwritingGenerator.generateText(handwritingTextInput, handwritingOptions);
             unsupportedCharacterCount = handwritingGenerator.getLastUnsupportedCharacterCount();
+            loadedHersheyWaypointCount = 0;
+            glyphLibraryWaypointCount = 0;
+            glyphLibraryUnsupportedCount = 0;
+        } else if (pathMode == 3) {
+            unsupportedCharacterCount = 0;
+            glyphLibraryWaypointCount = 0;
+            glyphLibraryUnsupportedCount = 0;
+            if (hasLoadedHersheyPath) {
+                activeWaypoints = hersheyPathLoader.generateWaypoints(loadedHersheyPath, handwritingOptions);
+                loadedHersheyWaypointCount = static_cast<int>(activeWaypoints.size());
+            } else {
+                activeWaypoints.clear();
+                loadedHersheyWaypointCount = 0;
+                if (hersheyLoadError.empty()) {
+                    hersheyLoadError = "No Hershey JSON loaded yet.";
+                }
+            }
+        } else {
+            unsupportedCharacterCount = 0;
+            loadedHersheyWaypointCount = 0;
+            if (hasLoadedGlyphLibrary) {
+                activeWaypoints = hersheyGlyphLibrary.generateWaypointsForText(
+                    glyphLibraryTextInput,
+                    handwritingOptions,
+                    &glyphLibraryUnsupportedCount
+                );
+                glyphLibraryWaypointCount = static_cast<int>(activeWaypoints.size());
+            } else {
+                activeWaypoints.clear();
+                glyphLibraryUnsupportedCount = 0;
+                glyphLibraryWaypointCount = 0;
+                if (glyphLibraryLoadError.empty()) {
+                    glyphLibraryLoadError = "No Hershey glyph library loaded yet.";
+                }
+            }
         }
         trajectoryTracker.setWaypoints(activeWaypoints);
         trajectoryTracker.reset(robotKinematics.getToolTipPosition());
@@ -555,7 +617,7 @@ int main()
         }
 
         ImGui::Separator();
-        if (ImGui::Combo("Path Mode", &pathMode, pathModeItems, 3)) {
+        if (ImGui::Combo("Path Mode", &pathMode, pathModeItems, 5)) {
             reloadActivePath();
         }
         if (ImGui::Checkbox("Use Spline", &handwritingOptions.useSpline)) {
@@ -569,18 +631,107 @@ int main()
         }
         if (pathMode == 2) {
             ImGui::InputText("Text Input", handwritingTextInput, sizeof(handwritingTextInput));
+        }
+        if (pathMode == 2 || pathMode == 4) {
             if (ImGui::SliderFloat("Character Spacing", &handwritingOptions.characterSpacing, 0.0f, 0.12f)) {
                 reloadActivePath();
             }
             if (ImGui::SliderFloat("Word Spacing", &handwritingOptions.wordSpacing, 0.03f, 0.40f)) {
                 reloadActivePath();
             }
+        }
+        if (pathMode == 2) {
             if (ImGui::Button("Generate Text Path")) {
                 reloadActivePath();
             }
             ImGui::Text("Current Text: %s", handwritingTextInput);
             ImGui::Text("Supported Glyphs: a, b, c, space");
             ImGui::Text("Unsupported Character Count: %d", unsupportedCharacterCount);
+        }
+        if (pathMode == 3) {
+            ImGui::InputText("Hershey JSON Path", hersheyJsonPath, sizeof(hersheyJsonPath));
+            if (ImGui::Button("Load Hershey JSON")) {
+                HersheyPathLoader::LoadedPath loadedPath;
+                std::string loadError;
+                if (hersheyPathLoader.loadFromJson(hersheyJsonPath, loadedPath, &loadError)) {
+                    loadedHersheyPath = loadedPath;
+                    hasLoadedHersheyPath = true;
+                    hersheyLoadError.clear();
+                    activeWaypoints = hersheyPathLoader.generateWaypoints(loadedHersheyPath, handwritingOptions);
+                    loadedHersheyWaypointCount = static_cast<int>(activeWaypoints.size());
+                    trajectoryTracker.setWaypoints(activeWaypoints);
+                    trajectoryTracker.reset(robotKinematics.getToolTipPosition());
+                    enableWaypointPlayback = false;
+                } else {
+                    hasLoadedHersheyPath = false;
+                    hersheyLoadError = loadError;
+                    loadedHersheyWaypointCount = 0;
+                }
+            }
+            ImGui::Text("Current Loaded Text: %s", hasLoadedHersheyPath ? loadedHersheyPath.text.c_str() : "none");
+            ImGui::Text("Current Loaded Font: %s", hasLoadedHersheyPath ? loadedHersheyPath.font.c_str() : "none");
+            ImGui::Text("Loaded Stroke Count: %d", hasLoadedHersheyPath ? static_cast<int>(loadedHersheyPath.strokes.size()) : 0);
+            ImGui::Text("Loaded Hershey Waypoint Count: %d", loadedHersheyWaypointCount);
+            if (!hersheyLoadError.empty()) {
+                ImGui::Text("JSON Load Error: %s", hersheyLoadError.c_str());
+            }
+            ImGui::Text("Command hint:");
+            ImGui::TextWrapped("cd robot_arm && python scripts/generate_hershey_path.py --text \"hello\" --font futural --output assets/paths/hershey_text.json");
+        }
+        if (pathMode == 4) {
+            ImGui::InputText("Glyph Library Path", glyphLibraryPath, sizeof(glyphLibraryPath));
+            if (ImGui::Button("Load Glyph Library")) {
+                std::string loadError;
+                if (hersheyGlyphLibrary.loadFromJson(glyphLibraryPath, &loadError)) {
+                    hasLoadedGlyphLibrary = true;
+                    glyphLibraryLoadError.clear();
+                    activeWaypoints = hersheyGlyphLibrary.generateWaypointsForText(
+                        glyphLibraryTextInput,
+                        handwritingOptions,
+                        &glyphLibraryUnsupportedCount
+                    );
+                    glyphLibraryWaypointCount = static_cast<int>(activeWaypoints.size());
+                    trajectoryTracker.setWaypoints(activeWaypoints);
+                    trajectoryTracker.reset(robotKinematics.getToolTipPosition());
+                    enableWaypointPlayback = false;
+                } else {
+                    hasLoadedGlyphLibrary = false;
+                    glyphLibraryLoadError = loadError;
+                    glyphLibraryUnsupportedCount = 0;
+                    glyphLibraryWaypointCount = 0;
+                }
+            }
+            ImGui::InputText("Glyph Library Text", glyphLibraryTextInput, sizeof(glyphLibraryTextInput));
+            if (ImGui::Button("Generate Glyph Library Text Path")) {
+                if (hasLoadedGlyphLibrary) {
+                    activeWaypoints = hersheyGlyphLibrary.generateWaypointsForText(
+                        glyphLibraryTextInput,
+                        handwritingOptions,
+                        &glyphLibraryUnsupportedCount
+                    );
+                    glyphLibraryWaypointCount = static_cast<int>(activeWaypoints.size());
+                    trajectoryTracker.setWaypoints(activeWaypoints);
+                    trajectoryTracker.reset(robotKinematics.getToolTipPosition());
+                    enableWaypointPlayback = false;
+                    glyphLibraryLoadError.clear();
+                } else {
+                    glyphLibraryLoadError = "Load a glyph library before generating text.";
+                }
+            }
+            ImGui::Text("Current Glyph Library Font: %s", hasLoadedGlyphLibrary ? hersheyGlyphLibrary.getFontName().c_str() : "none");
+            ImGui::Text("Loaded Glyph Count: %d", hasLoadedGlyphLibrary ? hersheyGlyphLibrary.getGlyphCount() : 0);
+            if (hasLoadedGlyphLibrary) {
+                ImGui::TextWrapped("Supported Characters: %s", hersheyGlyphLibrary.getSupportedCharacterSummary().c_str());
+            } else {
+                ImGui::Text("Supported Characters: none");
+            }
+            ImGui::Text("Glyph Library Unsupported Characters: %d", glyphLibraryUnsupportedCount);
+            ImGui::Text("Glyph Library Waypoint Count: %d", glyphLibraryWaypointCount);
+            if (!glyphLibraryLoadError.empty()) {
+                ImGui::Text("Glyph Library Error: %s", glyphLibraryLoadError.c_str());
+            }
+            ImGui::Text("Glyph library command hint:");
+            ImGui::TextWrapped("cd robot_arm && python scripts/generate_hershey_glyph_library.py --font futural --output assets/fonts/hershey_futural_glyphs.json");
         }
         if (ImGui::Checkbox("Lock Paper To Floor", &lockPaperToFloor)) {
             updatePaperPlane();
@@ -628,6 +779,10 @@ int main()
         ImGui::Text("Generated Waypoint Count: %d", trajectoryTracker.getWaypointCount());
         if (pathMode == 2) {
             ImGui::Text("Text Path Unsupported Characters: %d", unsupportedCharacterCount);
+        }
+        if (pathMode == 4) {
+            ImGui::Text("Glyph Library Unsupported Characters: %d", glyphLibraryUnsupportedCount);
+            ImGui::Text("Glyph Library Generated Waypoints: %d", glyphLibraryWaypointCount);
         }
         ImGui::Text("Floor Y: %.4f", floorY);
         ImGui::Text("Paper Thickness Offset: %.4f", paperThicknessOffset);
@@ -807,7 +962,7 @@ int main()
         ImGui::Text("Stroke Point Count: %d", strokeRenderer.getStrokePointCount());
         ImGui::Text("Stroke Segment Count: %d", strokeRenderer.getStrokeSegmentCount());
         ImGui::Text("Stamp Count: %d", strokeRenderer.getStampCount());
-        if (pathMode == 1) {
+        if (pathMode != 0) {
             ImGui::Text("Expected Current Waypoint Y: %.4f", expectedWaypointY);
         } else {
             ImGui::Text("Expected Current Waypoint Y: n/a for Test Waypoints");
@@ -836,7 +991,7 @@ int main()
             ImGui::Text("y: %.4f", currentWaypoint.position.y);
             ImGui::Text("z: %.4f", currentWaypoint.position.z);
             ImGui::Text("Current Waypoint penDown: %s", currentWaypoint.penDown ? "true" : "false");
-            if (pathMode == 1) {
+            if (pathMode != 0) {
                 const float waypointExpectedY = currentWaypoint.penDown
                     ? handwritingOptions.paperY
                     : handwritingOptions.paperY + handwritingOptions.liftHeight;
