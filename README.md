@@ -66,6 +66,14 @@ cd /data/Graphics_2026/course2601-graphics-project/robot_arm/build
 
 Hershey-Fonts 기반 텍스트 경로를 앱에서 조합하려면, 먼저 glyph library JSON을 생성합니다.
 
+conda 환경에서 Hershey-Fonts import가 되는지 확인합니다.
+
+```bash
+python -c "from HersheyFonts import HersheyFonts; print('Hershey-Fonts OK')"
+```
+
+그 다음 glyph library를 생성합니다.
+
 ```bash
 cd robot_arm
 python scripts/generate_hershey_glyph_library.py --font futural --output assets/fonts/hershey_futural_glyphs.json
@@ -76,6 +84,10 @@ python scripts/generate_hershey_glyph_library.py --font futural --output assets/
 ```text
 ../assets/fonts/hershey_futural_glyphs.json
 ```
+
+앱 실행 중에는 Python script를 자동 호출하지 않습니다. CMake build 과정에서도 이 script는 실행되지 않으므로, C++ 빌드는 Hershey-Fonts Python package 설치 여부와 분리되어 있습니다.
+
+ImGui에서 loaded source가 `fallback-no-hershey-fonts` 또는 fallback warning으로 표시되면, 현재 JSON이 실제 Hershey-Fonts 기반이 아니라 sample fallback 데이터라는 뜻입니다. 이 경우 위 명령을 Hershey-Fonts가 설치된 conda 환경에서 다시 실행하면 됩니다.
 
 ## 빌드 파일 정리
 

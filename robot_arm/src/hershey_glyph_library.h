@@ -48,14 +48,17 @@ public:
     float getDefaultAdvance() const;
     float getDefaultSpaceAdvance() const;
 
+    const std::string& getSourceName() const;
     const std::string& getFontName() const;
     int getGlyphCount() const;
+    bool isLikelyFallbackLibrary() const;
     std::string getSupportedCharacterSummary() const;
 
     std::vector<Waypoint> generateWaypointsForText(
         const std::string& text,
         const HandwritingPathGenerator::Options& options,
-        int* unsupportedCharacterCount = NULL
+        int* unsupportedCharacterCount = NULL,
+        std::string* unsupportedCharacters = NULL
     ) const;
 
 private:

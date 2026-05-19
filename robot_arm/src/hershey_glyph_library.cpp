@@ -446,6 +446,11 @@ float HersheyGlyphLibrary::getDefaultSpaceAdvance() const
     return defaultSpaceAdvance_;
 }
 
+const std::string& HersheyGlyphLibrary::getSourceName() const
+{
+    return source_;
+}
+
 const std::string& HersheyGlyphLibrary::getFontName() const
 {
     return fontName_;
@@ -454,6 +459,11 @@ const std::string& HersheyGlyphLibrary::getFontName() const
 int HersheyGlyphLibrary::getGlyphCount() const
 {
     return static_cast<int>(glyphs_.size());
+}
+
+bool HersheyGlyphLibrary::isLikelyFallbackLibrary() const
+{
+    return source_.find("fallback") != std::string::npos || source_ != "hershey-fonts";
 }
 
 std::string HersheyGlyphLibrary::getSupportedCharacterSummary() const
@@ -474,10 +484,12 @@ std::string HersheyGlyphLibrary::getSupportedCharacterSummary() const
 std::vector<Waypoint> HersheyGlyphLibrary::generateWaypointsForText(
     const std::string& text,
     const HandwritingPathGenerator::Options& options,
-    int* unsupportedCharacterCount) const
+    int* unsupportedCharacterCount,
+    std::string* unsupportedCharacters) const
 {
     std::vector<Waypoint> waypoints;
     int unsupportedCount = 0;
+    std::string unsupported;
     float cursorXLocal = 0.0f;
     const float inverseScale = options.scale > 0.0001f ? 1.0f / options.scale : 1.0f;
     const float characterSpacingLocal = options.characterSpacing * inverseScale;
@@ -495,6 +507,12 @@ std::vector<Waypoint> HersheyGlyphLibrary::generateWaypointsForText(
         const HersheyGlyph* glyph = getGlyph(c);
         if (!glyph) {
             ++unsupportedCount;
+            if (unsupported.find(c) == std::string::npos) {
+                if (!unsupported.empty()) {
+                    unsupported += ", ";
+                }
+                unsupported.push_back(c);
+            }
             continue;
         }
 
@@ -560,6 +578,9 @@ std::vector<Waypoint> HersheyGlyphLibrary::generateWaypointsForText(
 
     if (unsupportedCharacterCount) {
         *unsupportedCharacterCount = unsupportedCount;
+    }
+    if (unsupportedCharacters) {
+        *unsupportedCharacters = unsupported;
     }
     return waypoints;
 }

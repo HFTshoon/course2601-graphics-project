@@ -31,6 +31,8 @@
 #include "hershey_glyph_library.h"
 #include <algorithm>
 #include <array>
+#include <cstdio>
+#include <cstring>
 #include <limits>
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -312,7 +314,7 @@ int main()
     handwritingOptions.liftHeight = 0.05f;
     handwritingOptions.sampleSpacing = 0.01f;
     handwritingOptions.useSpline = true;
-    int pathMode = 0;
+    int pathMode = 4;
     const char* pathModeItems[] = {
         "Test Waypoints",
         "Lowercase a",
@@ -333,8 +335,12 @@ int main()
     HersheyGlyphLibrary hersheyGlyphLibrary;
     bool hasLoadedGlyphLibrary = false;
     std::string glyphLibraryLoadError;
+    std::string loadedGlyphLibraryPath;
+    std::string glyphLibraryUnsupportedCharacters;
     int glyphLibraryUnsupportedCount = 0;
     int glyphLibraryWaypointCount = 0;
+    const int glyphLibraryWaypointWarningThreshold = 5000;
+    const size_t glyphLibraryTextLengthWarningThreshold = 64;
     std::vector<Waypoint> activeWaypoints = testWaypoints;
     TrajectoryTracker trajectoryTracker;
     trajectoryTracker.setWaypoints(activeWaypoints);
@@ -395,6 +401,7 @@ int main()
         applyPaperPreset(selectedPaperPreset);
     }
     const char* strokeRenderModeItems[] = { "Line Strip", "Image Brush Stamp" };
+    strokeRenderer.setRenderMode(StrokeRenderMode::ImageBrushStamp);
     Entity* paperEntity = new Entity(&paperModel, glm::mat4(1.0f));
     scene.addEntity(paperEntity);
     auto syncPaperYToFloor = [&]() {
@@ -419,6 +426,49 @@ int main()
             && trajectoryTracker.getWaypointCount() > 0
             && trajectoryTracker.getCurrentWaypointIndex() < trajectoryTracker.getWaypointCount()
             && trajectoryTracker.getCurrentWaypoint().penDown;
+    };
+    auto generateGlyphLibraryTextPath = [&]() {
+        glyphLibraryUnsupportedCount = 0;
+        glyphLibraryUnsupportedCharacters.clear();
+        glyphLibraryWaypointCount = 0;
+
+        if (!hasLoadedGlyphLibrary) {
+            activeWaypoints.clear();
+            glyphLibraryLoadError = "Load a glyph library before generating text.";
+            return false;
+        }
+        if (std::strlen(glyphLibraryTextInput) == 0) {
+            activeWaypoints.clear();
+            glyphLibraryLoadError = "Glyph library text is empty.";
+            return false;
+        }
+
+        activeWaypoints = hersheyGlyphLibrary.generateWaypointsForText(
+            glyphLibraryTextInput,
+            handwritingOptions,
+            &glyphLibraryUnsupportedCount,
+            &glyphLibraryUnsupportedCharacters
+        );
+        glyphLibraryWaypointCount = static_cast<int>(activeWaypoints.size());
+        glyphLibraryLoadError.clear();
+        return true;
+    };
+    auto loadGlyphLibraryFromPath = [&]() {
+        std::string loadError;
+        if (hersheyGlyphLibrary.loadFromJson(glyphLibraryPath, &loadError)) {
+            hasLoadedGlyphLibrary = true;
+            loadedGlyphLibraryPath = glyphLibraryPath;
+            glyphLibraryLoadError.clear();
+            return true;
+        }
+
+        hasLoadedGlyphLibrary = false;
+        loadedGlyphLibraryPath.clear();
+        glyphLibraryLoadError = loadError;
+        glyphLibraryUnsupportedCount = 0;
+        glyphLibraryUnsupportedCharacters.clear();
+        glyphLibraryWaypointCount = 0;
+        return false;
     };
     auto reloadActivePath = [&]() {
         syncPaperYToFloor();
@@ -457,20 +507,8 @@ int main()
         } else {
             unsupportedCharacterCount = 0;
             loadedHersheyWaypointCount = 0;
-            if (hasLoadedGlyphLibrary) {
-                activeWaypoints = hersheyGlyphLibrary.generateWaypointsForText(
-                    glyphLibraryTextInput,
-                    handwritingOptions,
-                    &glyphLibraryUnsupportedCount
-                );
-                glyphLibraryWaypointCount = static_cast<int>(activeWaypoints.size());
-            } else {
-                activeWaypoints.clear();
-                glyphLibraryUnsupportedCount = 0;
-                glyphLibraryWaypointCount = 0;
-                if (glyphLibraryLoadError.empty()) {
-                    glyphLibraryLoadError = "No Hershey glyph library loaded yet.";
-                }
+            if (!generateGlyphLibraryTextPath() && glyphLibraryLoadError.empty()) {
+                glyphLibraryLoadError = "No Hershey glyph library loaded yet.";
             }
         }
         trajectoryTracker.setWaypoints(activeWaypoints);
@@ -478,6 +516,8 @@ int main()
         enableWaypointPlayback = false;
     };
     updatePaperPlane();
+    loadGlyphLibraryFromPath();
+    reloadActivePath();
     const std::array<float, RobotKinematics::DOF> initialJointAngles = robotKinematics.getJointAngles();
     const std::vector<glm::mat4>& initialLinkTransforms = robotKinematics.getLinkWorldTransforms();
 
@@ -623,7 +663,7 @@ int main()
         if (ImGui::Checkbox("Use Spline", &handwritingOptions.useSpline)) {
             reloadActivePath();
         }
-        if (ImGui::SliderFloat("Glyph Scale", &handwritingOptions.scale, 0.05f, 0.30f)) {
+        if (ImGui::SliderFloat("Glyph Scale", &handwritingOptions.scale, 0.02f, 0.30f)) {
             reloadActivePath();
         }
         if (ImGui::SliderFloat("Sample Spacing", &handwritingOptions.sampleSpacing, 0.005f, 0.030f)) {
@@ -681,52 +721,64 @@ int main()
         if (pathMode == 4) {
             ImGui::InputText("Glyph Library Path", glyphLibraryPath, sizeof(glyphLibraryPath));
             if (ImGui::Button("Load Glyph Library")) {
-                std::string loadError;
-                if (hersheyGlyphLibrary.loadFromJson(glyphLibraryPath, &loadError)) {
-                    hasLoadedGlyphLibrary = true;
-                    glyphLibraryLoadError.clear();
-                    activeWaypoints = hersheyGlyphLibrary.generateWaypointsForText(
-                        glyphLibraryTextInput,
-                        handwritingOptions,
-                        &glyphLibraryUnsupportedCount
-                    );
-                    glyphLibraryWaypointCount = static_cast<int>(activeWaypoints.size());
+                if (loadGlyphLibraryFromPath() && generateGlyphLibraryTextPath()) {
                     trajectoryTracker.setWaypoints(activeWaypoints);
                     trajectoryTracker.reset(robotKinematics.getToolTipPosition());
                     enableWaypointPlayback = false;
-                } else {
-                    hasLoadedGlyphLibrary = false;
-                    glyphLibraryLoadError = loadError;
-                    glyphLibraryUnsupportedCount = 0;
-                    glyphLibraryWaypointCount = 0;
                 }
             }
             ImGui::InputText("Glyph Library Text", glyphLibraryTextInput, sizeof(glyphLibraryTextInput));
             if (ImGui::Button("Generate Glyph Library Text Path")) {
-                if (hasLoadedGlyphLibrary) {
-                    activeWaypoints = hersheyGlyphLibrary.generateWaypointsForText(
-                        glyphLibraryTextInput,
-                        handwritingOptions,
-                        &glyphLibraryUnsupportedCount
-                    );
-                    glyphLibraryWaypointCount = static_cast<int>(activeWaypoints.size());
+                if (generateGlyphLibraryTextPath()) {
                     trajectoryTracker.setWaypoints(activeWaypoints);
                     trajectoryTracker.reset(robotKinematics.getToolTipPosition());
                     enableWaypointPlayback = false;
-                    glyphLibraryLoadError.clear();
-                } else {
-                    glyphLibraryLoadError = "Load a glyph library before generating text.";
                 }
             }
+            if (ImGui::Button("Reset Glyph Demo")) {
+                std::snprintf(glyphLibraryPath, sizeof(glyphLibraryPath), "%s", "../assets/fonts/hershey_futural_glyphs.json");
+                std::snprintf(glyphLibraryTextInput, sizeof(glyphLibraryTextInput), "%s", "hello");
+                handwritingOptions.useSpline = true;
+                handwritingOptions.scale = 0.15f;
+                handwritingOptions.sampleSpacing = 0.01f;
+                handwritingOptions.characterSpacing = 0.035f;
+                handwritingOptions.wordSpacing = 0.16f;
+                strokeRenderer.setRenderMode(StrokeRenderMode::ImageBrushStamp);
+                if (loadGlyphLibraryFromPath() && generateGlyphLibraryTextPath()) {
+                    trajectoryTracker.setWaypoints(activeWaypoints);
+                    trajectoryTracker.reset(robotKinematics.getToolTipPosition());
+                    enableWaypointPlayback = false;
+                }
+            }
+            ImGui::Text("Loaded Glyph Library Path: %s", loadedGlyphLibraryPath.empty() ? "none" : loadedGlyphLibraryPath.c_str());
+            ImGui::Text("Glyph Library Source: %s", hasLoadedGlyphLibrary ? hersheyGlyphLibrary.getSourceName().c_str() : "none");
             ImGui::Text("Current Glyph Library Font: %s", hasLoadedGlyphLibrary ? hersheyGlyphLibrary.getFontName().c_str() : "none");
             ImGui::Text("Loaded Glyph Count: %d", hasLoadedGlyphLibrary ? hersheyGlyphLibrary.getGlyphCount() : 0);
+            ImGui::Text(
+                "Glyph Library Type: %s",
+                hasLoadedGlyphLibrary
+                    ? (hersheyGlyphLibrary.isLikelyFallbackLibrary() ? "fallback / sample" : "real Hershey-Fonts")
+                    : "not loaded"
+            );
+            if (hasLoadedGlyphLibrary && hersheyGlyphLibrary.isLikelyFallbackLibrary()) {
+                ImGui::TextWrapped("Warning: loaded glyph library appears to be fallback data. Run the Python script in the conda environment with Hershey-Fonts installed.");
+            }
             if (hasLoadedGlyphLibrary) {
                 ImGui::TextWrapped("Supported Characters: %s", hersheyGlyphLibrary.getSupportedCharacterSummary().c_str());
             } else {
                 ImGui::Text("Supported Characters: none");
             }
             ImGui::Text("Glyph Library Unsupported Characters: %d", glyphLibraryUnsupportedCount);
+            if (!glyphLibraryUnsupportedCharacters.empty()) {
+                ImGui::Text("Unsupported: %s", glyphLibraryUnsupportedCharacters.c_str());
+            }
             ImGui::Text("Glyph Library Waypoint Count: %d", glyphLibraryWaypointCount);
+            if (std::strlen(glyphLibraryTextInput) > glyphLibraryTextLengthWarningThreshold) {
+                ImGui::TextWrapped("Warning: long text may generate many waypoints and slow playback.");
+            }
+            if (glyphLibraryWaypointCount > glyphLibraryWaypointWarningThreshold) {
+                ImGui::TextWrapped("Warning: generated waypoint count is high. Consider increasing Sample Spacing or shortening the text.");
+            }
             if (!glyphLibraryLoadError.empty()) {
                 ImGui::Text("Glyph Library Error: %s", glyphLibraryLoadError.c_str());
             }
