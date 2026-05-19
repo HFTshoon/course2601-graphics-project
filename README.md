@@ -89,6 +89,38 @@ python scripts/generate_hershey_glyph_library.py --font futural --output assets/
 
 ImGui에서 loaded source가 `fallback-no-hershey-fonts` 또는 fallback warning으로 표시되면, 현재 JSON이 실제 Hershey-Fonts 기반이 아니라 sample fallback 데이터라는 뜻입니다. 이 경우 위 명령을 Hershey-Fonts가 설치된 conda 환경에서 다시 실행하면 됩니다.
 
+## ambientCG Paper Texture 배치
+
+Paper preset은 ambientCG 스타일 texture를 아래 구조에서 찾습니다. 앱은 `robot_arm/build`에서 실행되므로 코드에서는 `../assets/...` 상대 경로로 로드합니다.
+
+```text
+robot_arm/assets/papers/smooth/albedo.png
+robot_arm/assets/papers/smooth/normal.png
+robot_arm/assets/papers/smooth/roughness.png
+
+robot_arm/assets/papers/rough/albedo.png
+robot_arm/assets/papers/rough/normal.png
+robot_arm/assets/papers/rough/roughness.png
+
+robot_arm/assets/papers/recycled/albedo.png
+robot_arm/assets/papers/recycled/normal.png
+robot_arm/assets/papers/recycled/roughness.png
+```
+
+- `albedo.png`: ambientCG `Color` 또는 `Albedo` map
+- `normal.png`: ambientCG `NormalGL` map을 rename한 파일
+- `roughness.png`: ambientCG `Roughness` map
+
+현재 단계에서는 paper plane rendering에 albedo texture만 사용합니다. `normal.png`와 `roughness.png`는 ImGui에서 path/existence를 확인하고, 이후 PBR 확장을 위해 보관합니다. `NormalDX`를 `normal.png`로 사용하면 OpenGL normal map 기준과 green channel 방향이 달라질 수 있습니다.
+
+structured albedo가 없으면 기존 placeholder texture로 fallback합니다.
+
+```text
+robot_arm/assets/papers/smooth_paper.png
+robot_arm/assets/papers/rough_paper.png
+robot_arm/assets/papers/recycled_paper.png
+```
+
 ## 빌드 파일 정리
 
 빌드 산출물은 `robot_arm/build/` 아래에 생성됩니다. 이 디렉터리는 `.gitignore`에 포함되어 있으므로 새로 생성되는 빌드 파일은 git에 추가되지 않습니다.

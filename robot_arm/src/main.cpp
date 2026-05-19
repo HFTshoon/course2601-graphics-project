@@ -33,6 +33,7 @@
 #include <array>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 #include <limits>
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -365,10 +366,79 @@ int main()
     }
     std::vector<PaperPreset> paperPresets = createDefaultPaperPresets();
     std::vector<const char*> paperPresetNames;
-    std::vector<Texture*> paperPresetTextures;
+    struct PaperTextureBinding {
+        Texture* texture = NULL;
+        std::string loadedAlbedoPath;
+        std::string fallbackAlbedoPath;
+        bool structuredAlbedoExists = false;
+        bool fallbackAlbedoExists = false;
+        bool normalExists = false;
+        bool roughnessExists = false;
+        bool usingStructuredAlbedo = false;
+        bool usingFallbackAlbedo = false;
+        bool usingBaseColor = false;
+    };
+    auto fileExists = [](const std::string& path) {
+        std::ifstream file(path.c_str(), std::ios::binary);
+        return file.good();
+    };
+    auto createSolidColorTexture = [](const glm::vec3& color) {
+        Texture* texture = new Texture();
+        texture->width = 1;
+        texture->height = 1;
+        texture->channels = 4;
+        const unsigned char pixel[4] = {
+            static_cast<unsigned char>(std::max(0.0f, std::min(1.0f, color.r)) * 255.0f),
+            static_cast<unsigned char>(std::max(0.0f, std::min(1.0f, color.g)) * 255.0f),
+            static_cast<unsigned char>(std::max(0.0f, std::min(1.0f, color.b)) * 255.0f),
+            255
+        };
+        glGenTextures(1, &texture->ID);
+        glBindTexture(GL_TEXTURE_2D, texture->ID);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+        return texture;
+    };
+    auto getPlaceholderPaperPath = [](const std::string& presetName) {
+        if (presetName == "Rough Paper") {
+            return std::string("../assets/papers/rough_paper.png");
+        }
+        if (presetName == "Recycled Paper") {
+            return std::string("../assets/papers/recycled_paper.png");
+        }
+        return std::string("../assets/papers/smooth_paper.png");
+    };
+    auto createPaperTextureBinding = [&](const PaperPreset& preset) {
+        PaperTextureBinding binding;
+        binding.fallbackAlbedoPath = getPlaceholderPaperPath(preset.name);
+        binding.structuredAlbedoExists = fileExists(preset.albedoTexturePath);
+        binding.fallbackAlbedoExists = fileExists(binding.fallbackAlbedoPath);
+        binding.normalExists = fileExists(preset.normalTexturePath);
+        binding.roughnessExists = fileExists(preset.roughnessTexturePath);
+
+        if (binding.structuredAlbedoExists) {
+            binding.texture = new Texture(preset.albedoTexturePath.c_str());
+            binding.loadedAlbedoPath = preset.albedoTexturePath;
+            binding.usingStructuredAlbedo = true;
+        } else if (binding.fallbackAlbedoExists) {
+            binding.texture = new Texture(binding.fallbackAlbedoPath.c_str());
+            binding.loadedAlbedoPath = binding.fallbackAlbedoPath;
+            binding.usingFallbackAlbedo = true;
+        } else {
+            binding.texture = createSolidColorTexture(preset.baseColor);
+            binding.loadedAlbedoPath = "baseColor fallback";
+            binding.usingBaseColor = true;
+        }
+
+        return binding;
+    };
+    std::vector<PaperTextureBinding> paperTextureBindings;
     for (size_t presetIndex = 0; presetIndex < paperPresets.size(); ++presetIndex) {
         paperPresetNames.push_back(paperPresets[presetIndex].name.c_str());
-        paperPresetTextures.push_back(new Texture(paperPresets[presetIndex].albedoTexturePath.c_str()));
+        paperTextureBindings.push_back(createPaperTextureBinding(paperPresets[presetIndex]));
     }
     int selectedPaperPreset = 0;
     PaperPreset activePaperPreset = paperPresets.empty() ? PaperPreset() : paperPresets[selectedPaperPreset];
@@ -392,8 +462,8 @@ int main()
         }
         selectedPaperPreset = presetIndex;
         activePaperPreset = paperPresets[selectedPaperPreset];
-        if (selectedPaperPreset < static_cast<int>(paperPresetTextures.size())) {
-            paperModel.diffuse = paperPresetTextures[selectedPaperPreset];
+        if (selectedPaperPreset < static_cast<int>(paperTextureBindings.size())) {
+            paperModel.diffuse = paperTextureBindings[selectedPaperPreset].texture;
         }
         applyPaperInfluence();
     };
@@ -858,7 +928,38 @@ int main()
                 applyPaperPreset(selectedPaperPreset);
             }
             ImGui::Text("Current Paper Preset: %s", activePaperPreset.name.c_str());
-            ImGui::Text("Paper Texture Path: %s", activePaperPreset.albedoTexturePath.c_str());
+            const PaperTextureBinding* activePaperTextureBinding = NULL;
+            if (selectedPaperPreset >= 0 && selectedPaperPreset < static_cast<int>(paperTextureBindings.size())) {
+                activePaperTextureBinding = &paperTextureBindings[selectedPaperPreset];
+            }
+            ImGui::Text("Albedo Texture Path: %s", activePaperPreset.albedoTexturePath.c_str());
+            ImGui::Text("Normal Texture Path: %s", activePaperPreset.normalTexturePath.c_str());
+            ImGui::Text("Roughness Texture Path: %s", activePaperPreset.roughnessTexturePath.c_str());
+            if (activePaperTextureBinding) {
+                ImGui::Text("Loaded Paper Albedo: %s", activePaperTextureBinding->loadedAlbedoPath.c_str());
+                ImGui::Text(
+                    "Albedo Texture Loaded: %s",
+                    activePaperTextureBinding->usingStructuredAlbedo ? "true" : "fallback"
+                );
+                ImGui::Text(
+                    "Normal Texture Exists: %s",
+                    activePaperTextureBinding->normalExists ? "true" : "missing"
+                );
+                ImGui::Text(
+                    "Roughness Texture Exists: %s",
+                    activePaperTextureBinding->roughnessExists ? "true" : "missing"
+                );
+                if (!activePaperTextureBinding->structuredAlbedoExists) {
+                    ImGui::Text("Warning: structured albedo missing; using placeholder or baseColor fallback.");
+                }
+                if (!activePaperTextureBinding->normalExists) {
+                    ImGui::Text("Warning: normal texture missing. Normal mapping is not enabled in this step.");
+                }
+                if (!activePaperTextureBinding->roughnessExists) {
+                    ImGui::Text("Warning: roughness texture missing. Roughness map shading is not enabled in this step.");
+                }
+            }
+            ImGui::Text("NormalGL Warning: normal.png should be ambientCG NormalGL. NormalDX may flip the green channel.");
             float paperBaseColor[3] = {
                 activePaperPreset.baseColor.r,
                 activePaperPreset.baseColor.g,

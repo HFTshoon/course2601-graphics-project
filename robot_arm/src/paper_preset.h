@@ -9,7 +9,10 @@
 struct PaperPreset {
     std::string name;
     glm::vec3 baseColor;
+
     std::string albedoTexturePath;
+    std::string normalTexturePath;
+    std::string roughnessTexturePath;
 
     float roughness;
     float absorbency;
