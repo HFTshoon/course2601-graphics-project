@@ -33,9 +33,9 @@ public:
               useSpline(true),
               characterSpacing(0.035f),
               wordSpacing(0.16f),
-              textYawDegrees(90.0f),
-              paperRight(0.0f, 0.0f, 1.0f),
-              paperUp(-1.0f, 0.0f, 0.0f),
+              textYawDegrees(-90.0f),
+              paperRight(0.0f, 0.0f, -1.0f),
+              paperUp(1.0f, 0.0f, 0.0f),
               paperNormal(0.0f, 1.0f, 0.0f)
         {
         }

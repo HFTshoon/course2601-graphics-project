@@ -64,6 +64,7 @@ float lastX = SCR_WIDTH / 2.0f;
 float lastY = SCR_HEIGHT / 2.0f;
 bool firstMouse = true;
 bool imguiMode = true;  // start with mouse cursor visible for ImGui
+bool rightMouseCameraDrag = false;
 
 // timing
 float deltaTime = 0.0f;	// time between current frame and last frame
@@ -335,8 +336,8 @@ int main()
     handwritingOptions.liftHeight = 0.05f;
     handwritingOptions.sampleSpacing = 0.01f;
     handwritingOptions.useSpline = true;
-    // Default demo orientation: rotate the writing baseline 90 degrees on the paper.
-    handwritingOptions.setTextYawDegrees(90.0f);
+    // Default demo orientation: rotated for readability from the robot side.
+    handwritingOptions.setTextYawDegrees(-90.0f);
     int pathMode = 4;
     const char* pathModeItems[] = {
         "Test Waypoints",
@@ -929,7 +930,7 @@ int main()
         handwritingOptions.characterSpacing = 0.035f;
         handwritingOptions.wordSpacing = 0.16f;
         handwritingOptions.liftHeight = 0.05f;
-        handwritingOptions.setTextYawDegrees(90.0f);
+        handwritingOptions.setTextYawDegrees(-90.0f);
         lockPaperToFloor = true;
         usePaperMapShading = true;
         enablePaperMapStrokeModulation = true;
@@ -1154,6 +1155,7 @@ int main()
             resetMainDemo();
         }
         ImGui::TextWrapped("Status: %s", mainDemoStatus.c_str());
+        ImGui::TextWrapped("Camera: right-drag the viewport to rotate, WASD to move, Tab for full camera mode.");
         if (!glyphLibraryLoadError.empty()) {
             ImGui::TextWrapped("Text path warning: %s", glyphLibraryLoadError.c_str());
         }
@@ -2174,10 +2176,24 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 void mouse_callback(GLFWwindow* window, double xpos, double ypos)
 {
     if (imguiMode) {
-        // In ImGui mode: don't rotate camera
-        lastX = xpos;
-        lastY = ypos;
-        return;
+        const bool rightMouseDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+        const bool imguiWantsMouse = ImGui::GetCurrentContext() && ImGui::GetIO().WantCaptureMouse;
+        if (!rightMouseDown || imguiWantsMouse) {
+            rightMouseCameraDrag = false;
+            firstMouse = true;
+            lastX = xpos;
+            lastY = ypos;
+            return;
+        }
+
+        if (firstMouse || !rightMouseCameraDrag) {
+            lastX = xpos;
+            lastY = ypos;
+            firstMouse = false;
+            rightMouseCameraDrag = true;
+        }
+    } else {
+        rightMouseCameraDrag = false;
     }
 
     if (firstMouse)
