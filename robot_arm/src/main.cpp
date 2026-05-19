@@ -347,6 +347,7 @@ int main()
     char hersheyJsonPath[256] = "../assets/paths/example_hershey_text.json";
     char glyphLibraryPath[256] = "../assets/fonts/hershey_futural_glyphs.json";
     char glyphLibraryTextInput[128] = "robot";
+    char glyphDebugInput[8] = "q";
     std::string mainDemoStatus = "Ready.";
     int unsupportedCharacterCount = 0;
     HersheyPathLoader hersheyPathLoader;
@@ -446,7 +447,8 @@ int main()
     if (!penPresets.empty()) {
         applyPenPreset(penPresets[selectedPenPreset], selectedBrushImage);
     }
-    trajectoryTracker.setPlaybackSpeed(0.16f);
+    trajectoryTracker.setPlaybackSpeed(0.08f);
+    trajectoryTracker.setWaypointReachThreshold(0.006f);
     std::vector<PaperPreset> paperPresets = createDefaultPaperPresets();
     std::vector<const char*> paperPresetNames;
     struct PaperTextureBinding {
@@ -886,7 +888,8 @@ int main()
         enableStrokeRendering = true;
         enableWaypointPlayback = false;
         trajectoryTracker.pause();
-        trajectoryTracker.setPlaybackSpeed(0.16f);
+        trajectoryTracker.setPlaybackSpeed(0.08f);
+        trajectoryTracker.setWaypointReachThreshold(0.006f);
         const glm::vec3 toolTipPosition = robotKinematics.getToolTipPosition();
         paperCenterXZ = glm::vec2(toolTipPosition.x, toolTipPosition.z);
         updatePaperPlane();
@@ -914,6 +917,8 @@ int main()
         enablePaperMapStrokeModulation = true;
         strokeRenderer.setRenderMode(StrokeRenderMode::ImageBrushStamp);
         updatePaperPlane();
+        trajectoryTracker.setPlaybackSpeed(0.08f);
+        trajectoryTracker.setWaypointReachThreshold(0.006f);
 
         if (std::strlen(glyphLibraryTextInput) == 0) {
             mainDemoStatus = "Empty text input.";
@@ -1302,6 +1307,39 @@ int main()
             }
             ImGui::Text("Glyph library command hint:");
             ImGui::TextWrapped("cd robot_arm && python scripts/generate_hershey_glyph_library.py --font futural --output assets/fonts/hershey_futural_glyphs.json");
+            ImGui::Separator();
+            ImGui::InputText("Glyph Debug Character", glyphDebugInput, sizeof(glyphDebugInput));
+            const char debugCharacter = glyphDebugInput[0];
+            const HersheyGlyph* debugGlyph = hasLoadedGlyphLibrary
+                ? hersheyGlyphLibrary.getGlyph(debugCharacter)
+                : NULL;
+            ImGui::Text("Has Glyph: %s", debugGlyph ? "true" : "false");
+            ImGui::Text("Use Spline: %s", handwritingOptions.useSpline ? "true" : "false");
+            if (debugGlyph) {
+                int totalPointCount = 0;
+                for (size_t strokeIndex = 0; strokeIndex < debugGlyph->strokes.size(); ++strokeIndex) {
+                    totalPointCount += static_cast<int>(debugGlyph->strokes[strokeIndex].points.size());
+                }
+                ImGui::Text("Advance: %.4f", debugGlyph->advance);
+                ImGui::Text(
+                    "Bounds Min/Max: (%.4f, %.4f) / (%.4f, %.4f)",
+                    debugGlyph->boundsMin.x,
+                    debugGlyph->boundsMin.y,
+                    debugGlyph->boundsMax.x,
+                    debugGlyph->boundsMax.y
+                );
+                ImGui::Text("Stroke Count: %d", static_cast<int>(debugGlyph->strokes.size()));
+                ImGui::Text("Total Point Count: %d", totalPointCount);
+                for (size_t strokeIndex = 0; strokeIndex < debugGlyph->strokes.size(); ++strokeIndex) {
+                    const GlyphStroke2D& stroke = debugGlyph->strokes[strokeIndex];
+                    ImGui::Text(
+                        "Stroke %d: points %d, closed %s",
+                        static_cast<int>(strokeIndex),
+                        static_cast<int>(stroke.points.size()),
+                        stroke.closed ? "true" : "false"
+                    );
+                }
+            }
         }
         if (ImGui::Checkbox("Lock Paper To Floor", &lockPaperToFloor)) {
             updatePaperPlane();
@@ -1577,7 +1615,7 @@ int main()
             trajectoryTracker.setPlaybackSpeed(playbackSpeed);
         }
         float waypointThreshold = trajectoryTracker.getWaypointReachThreshold();
-        if (ImGui::SliderFloat("Waypoint Reach Threshold", &waypointThreshold, 0.005f, 0.10f)) {
+        if (ImGui::SliderFloat("Waypoint Reach Threshold", &waypointThreshold, 0.001f, 0.05f)) {
             trajectoryTracker.setWaypointReachThreshold(waypointThreshold);
         }
         }

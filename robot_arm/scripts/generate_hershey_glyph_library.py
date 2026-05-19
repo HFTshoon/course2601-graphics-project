@@ -70,9 +70,26 @@ def bounds_for_strokes(strokes):
     }
 
 
-def normalize_glyph_strokes(strokes, denominator, normalize):
+def mark_closed_loops(strokes, epsilon=1e-5):
+    processed = []
+    for stroke in strokes:
+        points = [[float(p[0]), float(p[1])] for p in stroke.get("points", [])]
+        if len(points) < 2:
+            continue
+
+        closed = bool(stroke.get("closed", False))
+        if len(points) >= 4 and distance(points[0], points[-1]) <= epsilon:
+            closed = True
+            points = points[:-1]
+
+        if len(points) >= 2:
+            processed.append({"closed": closed, "points": points})
+    return processed
+
+
+def normalize_glyph_strokes(strokes, denominator, normalize, global_min_y=0.0):
     raw_bounds = bounds_for_strokes(strokes)
-    min_x, min_y = raw_bounds["min"]
+    min_x = raw_bounds["min"][0]
     denom = max(denominator, 1e-6) if normalize else 1.0
 
     normalized = []
@@ -80,7 +97,7 @@ def normalize_glyph_strokes(strokes, denominator, normalize):
         points = []
         for x, y in stroke["points"]:
             if normalize:
-                points.append([(x - min_x) / denom, (y - min_y) / denom])
+                points.append([(x - min_x) / denom, (y - global_min_y) / denom])
             else:
                 points.append([x, y])
         if len(points) >= 2:
@@ -178,13 +195,19 @@ def fallback_raw_glyphs(chars):
 
 
 def build_library(raw_glyphs, source, font_name, normalize):
-    non_empty_bounds = [bounds_for_strokes(strokes) for strokes in raw_glyphs.values() if strokes]
-    common_height = max([bounds["height"] for bounds in non_empty_bounds] + [1.0])
+    processed_raw_glyphs = {
+        c: mark_closed_loops(strokes)
+        for c, strokes in raw_glyphs.items()
+    }
+    non_empty_bounds = [bounds_for_strokes(strokes) for strokes in processed_raw_glyphs.values() if strokes]
+    global_min_y = min([bounds["min"][1] for bounds in non_empty_bounds] + [0.0])
+    global_max_y = max([bounds["max"][1] for bounds in non_empty_bounds] + [1.0])
+    common_height = max(global_max_y - global_min_y, 1.0)
     default_advance = 1.0
     default_space_advance = 0.6
 
     glyphs = {}
-    for c, raw_strokes in raw_glyphs.items():
+    for c, raw_strokes in processed_raw_glyphs.items():
         if c == " ":
             glyphs[c] = {
                 "advance": default_space_advance,
@@ -198,7 +221,12 @@ def build_library(raw_glyphs, source, font_name, normalize):
             }
             continue
 
-        normalized_strokes = normalize_glyph_strokes(raw_strokes, common_height, normalize)
+        normalized_strokes = normalize_glyph_strokes(
+            raw_strokes,
+            common_height,
+            normalize,
+            global_min_y
+        )
         bounds = bounds_for_strokes(normalized_strokes)
         advance = max(bounds["width"] + 0.12, 0.35)
         glyphs[c] = {

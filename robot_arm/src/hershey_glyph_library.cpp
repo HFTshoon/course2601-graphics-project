@@ -522,10 +522,21 @@ std::vector<Waypoint> HersheyGlyphLibrary::generateWaypointsForText(
                 continue;
             }
 
+            std::vector<glm::vec2> strokePoints = stroke.points;
+            bool effectiveClosed = stroke.closed;
+            if (strokePoints.size() >= 4
+                && glm::length(strokePoints.front() - strokePoints.back()) <= 1e-5f) {
+                effectiveClosed = true;
+                strokePoints.pop_back();
+            }
+            if (strokePoints.size() < 2) {
+                continue;
+            }
+
             std::vector<glm::vec3> controlPoints;
-            controlPoints.reserve(stroke.points.size());
-            for (size_t pointIndex = 0; pointIndex < stroke.points.size(); ++pointIndex) {
-                const glm::vec2& point = stroke.points[pointIndex];
+            controlPoints.reserve(strokePoints.size());
+            for (size_t pointIndex = 0; pointIndex < strokePoints.size(); ++pointIndex) {
+                const glm::vec2& point = strokePoints[pointIndex];
                 controlPoints.push_back(glm::vec3(
                     options.paperOrigin.x + options.scale * (cursorXLocal + point.x),
                     options.paperY,
@@ -534,14 +545,14 @@ std::vector<Waypoint> HersheyGlyphLibrary::generateWaypointsForText(
             }
 
             std::vector<glm::vec3> drawPoints;
-            if (options.useSpline) {
+            if (options.useSpline && controlPoints.size() >= 4) {
                 SplineGenerator splineGenerator;
                 SplineGenerator::Options splineOptions;
                 splineOptions.sampleSpacing = sampleSpacing;
-                splineOptions.closed = stroke.closed;
+                splineOptions.closed = effectiveClosed;
                 drawPoints = splineGenerator.generateCatmullRomSpline(controlPoints, splineOptions);
             } else {
-                drawPoints = samplePolyline(controlPoints, sampleSpacing, stroke.closed);
+                drawPoints = samplePolyline(controlPoints, sampleSpacing, effectiveClosed);
             }
 
             if (drawPoints.empty()) {
