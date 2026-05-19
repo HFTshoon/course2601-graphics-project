@@ -334,11 +334,7 @@ std::vector<Waypoint> HersheyPathLoader::generateWaypoints(
         controlPoints.reserve(stroke.points.size());
         for (size_t pointIndex = 0; pointIndex < stroke.points.size(); ++pointIndex) {
             const glm::vec2& point = stroke.points[pointIndex];
-            controlPoints.push_back(glm::vec3(
-                options.paperOrigin.x + options.scale * point.x,
-                options.paperY,
-                options.paperOrigin.z + options.scale * point.y
-            ));
+            controlPoints.push_back(options.waypointPosition(point.x, point.y, true));
         }
 
         std::vector<glm::vec3> drawPoints;

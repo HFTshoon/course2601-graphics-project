@@ -537,10 +537,10 @@ std::vector<Waypoint> HersheyGlyphLibrary::generateWaypointsForText(
             controlPoints.reserve(strokePoints.size());
             for (size_t pointIndex = 0; pointIndex < strokePoints.size(); ++pointIndex) {
                 const glm::vec2& point = strokePoints[pointIndex];
-                controlPoints.push_back(glm::vec3(
-                    options.paperOrigin.x + options.scale * (cursorXLocal + point.x),
-                    options.paperY,
-                    options.paperOrigin.z + options.scale * point.y
+                controlPoints.push_back(options.waypointPosition(
+                    cursorXLocal + point.x,
+                    point.y,
+                    true
                 ));
             }
 

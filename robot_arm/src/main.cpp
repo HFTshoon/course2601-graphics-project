@@ -217,7 +217,7 @@ int main()
     float floorY = 0.0f;
     float paperThicknessOffset = 0.001f;
     bool lockPaperToFloor = true;
-    const glm::vec2 paperPlaneSize(0.75f, 0.55f);
+    const glm::vec2 paperPlaneSize(1.10f, 0.75f);
     glm::vec2 paperCenterXZ(0.0f, 0.0f);
     bool usePaperMapShading = true;
     float paperUvScale = 3.0f;
@@ -335,6 +335,8 @@ int main()
     handwritingOptions.liftHeight = 0.05f;
     handwritingOptions.sampleSpacing = 0.01f;
     handwritingOptions.useSpline = true;
+    // Default demo orientation: rotate the writing baseline 90 degrees on the paper.
+    handwritingOptions.setTextYawDegrees(90.0f);
     int pathMode = 4;
     const char* pathModeItems[] = {
         "Test Waypoints",
@@ -447,7 +449,7 @@ int main()
     if (!penPresets.empty()) {
         applyPenPreset(penPresets[selectedPenPreset], selectedBrushImage);
     }
-    trajectoryTracker.setPlaybackSpeed(0.08f);
+    trajectoryTracker.setPlaybackSpeed(0.16f);
     trajectoryTracker.setWaypointReachThreshold(0.006f);
     std::vector<PaperPreset> paperPresets = createDefaultPaperPresets();
     std::vector<const char*> paperPresetNames;
@@ -643,18 +645,24 @@ int main()
     };
     auto updatePaperPlane = [&]() {
         syncPaperYToFloor();
-        paperEntity->modelMatrix =
-            glm::translate(glm::vec3(
-                paperCenterXZ.x,
-                handwritingOptions.paperY,
-                paperCenterXZ.y
-            ))
-            * glm::scale(glm::vec3(0.75f, 1.0f, 0.55f));
+        glm::mat4 paperWorld(1.0f);
+        paperWorld[0] = glm::vec4(handwritingOptions.paperRight * paperPlaneSize.x, 0.0f);
+        paperWorld[1] = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+        paperWorld[2] = glm::vec4(handwritingOptions.paperUp * paperPlaneSize.y, 0.0f);
+        paperWorld[3] = glm::vec4(
+            paperCenterXZ.x,
+            handwritingOptions.paperY,
+            paperCenterXZ.y,
+            1.0f
+        );
+        paperEntity->modelMatrix = paperWorld;
         strokeRenderer.setPaperY(handwritingOptions.paperY);
         strokeRenderer.setPaperMapping(
             paperCenterXZ,
             paperPlaneSize,
-            paperUvScale
+            paperUvScale,
+            glm::vec2(handwritingOptions.paperRight.x, handwritingOptions.paperRight.z),
+            glm::vec2(handwritingOptions.paperUp.x, handwritingOptions.paperUp.z)
         );
     };
     auto getTrajectoryPenDown = [&]() {
@@ -706,6 +714,24 @@ int main()
         glyphLibraryUnsupportedCharacters.clear();
         glyphLibraryWaypointCount = 0;
         return false;
+    };
+    auto appendReturnHomeWaypoint = [&](std::vector<Waypoint>& waypoints) {
+        if (waypoints.empty()) {
+            return;
+        }
+
+        const glm::vec3 lastPosition = waypoints.back().position;
+        const glm::vec3 liftedLastPosition(
+            lastPosition.x,
+            std::max(lastPosition.y, handwritingOptions.paperY + handwritingOptions.liftHeight),
+            lastPosition.z
+        );
+        if (glm::length(liftedLastPosition - lastPosition) > 1e-4f) {
+            waypoints.push_back(Waypoint(liftedLastPosition, false));
+        }
+        if (glm::length(initialToolTipPosition - waypoints.back().position) > 1e-4f) {
+            waypoints.push_back(Waypoint(initialToolTipPosition, false));
+        }
     };
     auto estimateGlyphLibraryTextBounds = [&](const char* text, glm::vec2& boundsMin, glm::vec2& boundsMax) {
         const float inverseScale = handwritingOptions.scale > 0.0001f ? 1.0f / handwritingOptions.scale : 1.0f;
@@ -760,26 +786,50 @@ int main()
 
         const float horizontalMargin = 0.06f;
         const float verticalMargin = 0.05f;
-        const float maxTextWidth = std::max(0.05f, paperPlaneSize.x - horizontalMargin * 2.0f);
-        const float textWidth = std::max(0.001f, (boundsMax.x - boundsMin.x) * handwritingOptions.scale);
-        if (fitScaleToPaper && textWidth > maxTextWidth) {
-            const float scaleFactor = maxTextWidth / textWidth;
+        auto computeRelativeTextBounds = [&](glm::vec2& relativeMin, glm::vec2& relativeMax) {
+            const glm::vec2 localCorners[4] = {
+                glm::vec2(boundsMin.x, boundsMin.y),
+                glm::vec2(boundsMax.x, boundsMin.y),
+                glm::vec2(boundsMax.x, boundsMax.y),
+                glm::vec2(boundsMin.x, boundsMax.y)
+            };
+            relativeMin = glm::vec2(std::numeric_limits<float>::max());
+            relativeMax = glm::vec2(-std::numeric_limits<float>::max());
+            for (int cornerIndex = 0; cornerIndex < 4; ++cornerIndex) {
+                const glm::vec3 relative =
+                    handwritingOptions.scale * localCorners[cornerIndex].x * handwritingOptions.paperRight
+                    + handwritingOptions.scale * localCorners[cornerIndex].y * handwritingOptions.paperUp;
+                relativeMin.x = std::min(relativeMin.x, relative.x);
+                relativeMin.y = std::min(relativeMin.y, relative.z);
+                relativeMax.x = std::max(relativeMax.x, relative.x);
+                relativeMax.y = std::max(relativeMax.y, relative.z);
+            }
+        };
+
+        glm::vec2 relativeMin(0.0f);
+        glm::vec2 relativeMax(0.0f);
+        computeRelativeTextBounds(relativeMin, relativeMax);
+        const float usableWidth = std::max(0.05f, paperPlaneSize.x - horizontalMargin * 2.0f);
+        const float usableDepth = std::max(0.05f, paperPlaneSize.y - verticalMargin * 2.0f);
+        const float textWidth = std::max(0.001f, relativeMax.x - relativeMin.x);
+        const float textDepth = std::max(0.001f, relativeMax.y - relativeMin.y);
+        if (fitScaleToPaper && (textWidth > usableWidth || textDepth > usableDepth)) {
+            const float scaleFactor = std::min(usableWidth / textWidth, usableDepth / textDepth);
             handwritingOptions.scale = std::max(0.045f, handwritingOptions.scale * scaleFactor);
             estimateGlyphLibraryTextBounds(glyphLibraryTextInput, boundsMin, boundsMax);
+            computeRelativeTextBounds(relativeMin, relativeMax);
         }
 
-        const float textHeight = std::max(0.001f, (boundsMax.y - boundsMin.y) * handwritingOptions.scale);
-        const float usableHeight = std::max(0.05f, paperPlaneSize.y - verticalMargin * 2.0f);
-        if (fitScaleToPaper && textHeight > usableHeight) {
-            const float scaleFactor = usableHeight / textHeight;
-            handwritingOptions.scale = std::max(0.045f, handwritingOptions.scale * scaleFactor);
-            estimateGlyphLibraryTextBounds(glyphLibraryTextInput, boundsMin, boundsMax);
-        }
-
-        const float paperLeft = paperCenterXZ.x - paperPlaneSize.x * 0.5f;
-        handwritingOptions.paperOrigin.x = paperLeft + horizontalMargin - boundsMin.x * handwritingOptions.scale;
-        handwritingOptions.paperOrigin.z =
-            paperCenterXZ.y - ((boundsMin.y + boundsMax.y) * 0.5f) * handwritingOptions.scale;
+        const glm::vec3 paperCenter(
+            paperCenterXZ.x,
+            handwritingOptions.paperY,
+            paperCenterXZ.y
+        );
+        handwritingOptions.paperOrigin =
+            paperCenter
+            - handwritingOptions.paperRight * (((boundsMin.x + boundsMax.x) * 0.5f) * handwritingOptions.scale)
+            - handwritingOptions.paperUp * (((boundsMin.y + boundsMax.y) * 0.5f) * handwritingOptions.scale);
+        handwritingOptions.paperOrigin.y = handwritingOptions.paperY;
     };
     auto reloadActivePath = [&]() {
         syncPaperYToFloor();
@@ -822,6 +872,12 @@ int main()
             if (!generateGlyphLibraryTextPath() && glyphLibraryLoadError.empty()) {
                 glyphLibraryLoadError = "No Hershey glyph library loaded yet.";
             }
+        }
+        appendReturnHomeWaypoint(activeWaypoints);
+        if (pathMode == 3) {
+            loadedHersheyWaypointCount = static_cast<int>(activeWaypoints.size());
+        } else if (pathMode == 4) {
+            glyphLibraryWaypointCount = static_cast<int>(activeWaypoints.size());
         }
         trajectoryTracker.setWaypoints(activeWaypoints);
         trajectoryTracker.reset(robotKinematics.getToolTipPosition());
@@ -873,6 +929,7 @@ int main()
         handwritingOptions.characterSpacing = 0.035f;
         handwritingOptions.wordSpacing = 0.16f;
         handwritingOptions.liftHeight = 0.05f;
+        handwritingOptions.setTextYawDegrees(90.0f);
         lockPaperToFloor = true;
         usePaperMapShading = true;
         enablePaperMapStrokeModulation = true;
@@ -888,7 +945,7 @@ int main()
         enableStrokeRendering = true;
         enableWaypointPlayback = false;
         trajectoryTracker.pause();
-        trajectoryTracker.setPlaybackSpeed(0.08f);
+        trajectoryTracker.setPlaybackSpeed(0.16f);
         trajectoryTracker.setWaypointReachThreshold(0.006f);
         const glm::vec3 toolTipPosition = robotKinematics.getToolTipPosition();
         paperCenterXZ = glm::vec2(toolTipPosition.x, toolTipPosition.z);
@@ -917,7 +974,7 @@ int main()
         enablePaperMapStrokeModulation = true;
         strokeRenderer.setRenderMode(StrokeRenderMode::ImageBrushStamp);
         updatePaperPlane();
-        trajectoryTracker.setPlaybackSpeed(0.08f);
+        trajectoryTracker.setPlaybackSpeed(0.16f);
         trajectoryTracker.setWaypointReachThreshold(0.006f);
 
         if (std::strlen(glyphLibraryTextInput) == 0) {
@@ -946,6 +1003,8 @@ int main()
             return;
         }
 
+        appendReturnHomeWaypoint(activeWaypoints);
+        glyphLibraryWaypointCount = static_cast<int>(activeWaypoints.size());
         trajectoryTracker.setWaypoints(activeWaypoints);
         trajectoryTracker.reset(robotKinematics.getToolTipPosition());
         strokeRenderer.clear();
@@ -1200,6 +1259,29 @@ int main()
         if (ImGui::SliderFloat("Sample Spacing", &handwritingOptions.sampleSpacing, 0.005f, 0.030f)) {
             reloadActivePath();
         }
+        float textYawDegrees = handwritingOptions.textYawDegrees;
+        if (ImGui::SliderFloat("Text Orientation Degrees", &textYawDegrees, -180.0f, 180.0f)) {
+            handwritingOptions.setTextYawDegrees(textYawDegrees);
+            reloadActivePath();
+        }
+        if (ImGui::Button("Text Orientation: 0 deg")) {
+            handwritingOptions.setTextYawDegrees(0.0f);
+            reloadActivePath();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("90 deg")) {
+            handwritingOptions.setTextYawDegrees(90.0f);
+            reloadActivePath();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("-90 deg")) {
+            handwritingOptions.setTextYawDegrees(-90.0f);
+            reloadActivePath();
+        }
+        if (ImGui::Button("Flip Text Up Direction")) {
+            handwritingOptions.paperUp = -handwritingOptions.paperUp;
+            reloadActivePath();
+        }
         if (pathMode == 2) {
             ImGui::InputText("Fallback Text Input", handwritingTextInput, sizeof(handwritingTextInput));
         }
@@ -1229,6 +1311,7 @@ int main()
                     hasLoadedHersheyPath = true;
                     hersheyLoadError.clear();
                     activeWaypoints = hersheyPathLoader.generateWaypoints(loadedHersheyPath, handwritingOptions);
+                    appendReturnHomeWaypoint(activeWaypoints);
                     loadedHersheyWaypointCount = static_cast<int>(activeWaypoints.size());
                     trajectoryTracker.setWaypoints(activeWaypoints);
                     trajectoryTracker.reset(robotKinematics.getToolTipPosition());
@@ -1256,6 +1339,8 @@ int main()
                     placeGlyphTextInsidePaper(true);
                 }
                 if (hasLoadedGlyphLibrary && generateGlyphLibraryTextPath()) {
+                    appendReturnHomeWaypoint(activeWaypoints);
+                    glyphLibraryWaypointCount = static_cast<int>(activeWaypoints.size());
                     trajectoryTracker.setWaypoints(activeWaypoints);
                     trajectoryTracker.reset(robotKinematics.getToolTipPosition());
                     enableWaypointPlayback = false;
@@ -1265,6 +1350,8 @@ int main()
             if (ImGui::Button("Generate Glyph Library Text Path")) {
                 placeGlyphTextInsidePaper(true);
                 if (generateGlyphLibraryTextPath()) {
+                    appendReturnHomeWaypoint(activeWaypoints);
+                    glyphLibraryWaypointCount = static_cast<int>(activeWaypoints.size());
                     trajectoryTracker.setWaypoints(activeWaypoints);
                     trajectoryTracker.reset(robotKinematics.getToolTipPosition());
                     enableWaypointPlayback = false;
@@ -1384,7 +1471,48 @@ int main()
         }
         ImGui::Text("Current Path Mode: %s", pathModeItems[pathMode]);
         ImGui::Text("Use Spline: %s", handwritingOptions.useSpline ? "true" : "false");
+        ImGui::Text("Text Yaw Degrees: %.1f", handwritingOptions.textYawDegrees);
+        ImGui::Text(
+            "Paper Right: (%.3f, %.3f, %.3f)",
+            handwritingOptions.paperRight.x,
+            handwritingOptions.paperRight.y,
+            handwritingOptions.paperRight.z
+        );
+        ImGui::Text(
+            "Paper Up: (%.3f, %.3f, %.3f)",
+            handwritingOptions.paperUp.x,
+            handwritingOptions.paperUp.y,
+            handwritingOptions.paperUp.z
+        );
         ImGui::Text("Generated Waypoint Count: %d", trajectoryTracker.getWaypointCount());
+        if (!activeWaypoints.empty()) {
+            glm::vec2 waypointMin(std::numeric_limits<float>::max());
+            glm::vec2 waypointMax(-std::numeric_limits<float>::max());
+            for (size_t waypointIndex = 0; waypointIndex < activeWaypoints.size(); ++waypointIndex) {
+                const glm::vec3& position = activeWaypoints[waypointIndex].position;
+                waypointMin.x = std::min(waypointMin.x, position.x);
+                waypointMin.y = std::min(waypointMin.y, position.z);
+                waypointMax.x = std::max(waypointMax.x, position.x);
+                waypointMax.y = std::max(waypointMax.y, position.z);
+            }
+            ImGui::Text(
+                "First Waypoint XZ: (%.3f, %.3f)",
+                activeWaypoints.front().position.x,
+                activeWaypoints.front().position.z
+            );
+            ImGui::Text(
+                "Last Waypoint XZ: (%.3f, %.3f)",
+                activeWaypoints.back().position.x,
+                activeWaypoints.back().position.z
+            );
+            ImGui::Text(
+                "Text World XZ Bounds: (%.3f, %.3f) - (%.3f, %.3f)",
+                waypointMin.x,
+                waypointMin.y,
+                waypointMax.x,
+                waypointMax.y
+            );
+        }
         if (pathMode == 2) {
             ImGui::Text("Text Path Unsupported Characters: %d", unsupportedCharacterCount);
         }
@@ -1634,7 +1762,9 @@ int main()
         strokeRenderer.setPaperMapping(
             paperCenterXZ,
             paperPlaneSize,
-            paperUvScale
+            paperUvScale,
+            glm::vec2(handwritingOptions.paperRight.x, handwritingOptions.paperRight.z),
+            glm::vec2(handwritingOptions.paperUp.x, handwritingOptions.paperUp.z)
         );
         strokeRenderer.setPaperMapStrokeModulation(
             enablePaperMapStrokeModulation,
@@ -1867,6 +1997,14 @@ int main()
                 paperCenterXZ
             );
             paperShader.setVec2("paperSize", paperPlaneSize);
+            paperShader.setVec2(
+                "paperRightXZ",
+                glm::vec2(handwritingOptions.paperRight.x, handwritingOptions.paperRight.z)
+            );
+            paperShader.setVec2(
+                "paperUpXZ",
+                glm::vec2(handwritingOptions.paperUp.x, handwritingOptions.paperUp.z)
+            );
             paperShader.setFloat("paperUvScale", paperUvScale);
             paperShader.setBool("usePaperMapShading", usePaperMapShading);
             paperShader.setBool("flipNormalY", flipPaperNormalY);

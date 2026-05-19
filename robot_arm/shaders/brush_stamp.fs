@@ -14,6 +14,8 @@ uniform float edgeNoiseStrength;
 uniform float fiberNoise;
 uniform vec2 paperOriginXZ;
 uniform vec2 paperSize;
+uniform vec2 paperRightXZ;
+uniform vec2 paperUpXZ;
 uniform float paperUvScale;
 uniform bool enablePaperMapModulation;
 uniform bool flipNormalY;
@@ -41,7 +43,11 @@ float valueNoise(vec2 p)
 
 vec2 computePaperUV(vec3 worldPosition)
 {
-    vec2 local = (worldPosition.xz - paperOriginXZ) / paperSize + vec2(0.5);
+    vec2 delta = worldPosition.xz - paperOriginXZ;
+    vec2 local = vec2(
+        dot(delta, normalize(paperRightXZ)) / paperSize.x,
+        dot(delta, normalize(paperUpXZ)) / paperSize.y
+    ) + vec2(0.5);
     return local * paperUvScale;
 }
 

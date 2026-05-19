@@ -46,7 +46,13 @@ public:
     float getPaperY() const;
 
     void setPaperMaterialTextures(unsigned int normalTextureID, unsigned int roughnessTextureID);
-    void setPaperMapping(const glm::vec2& originXZ, const glm::vec2& size, float uvScale);
+    void setPaperMapping(
+        const glm::vec2& originXZ,
+        const glm::vec2& size,
+        float uvScale,
+        const glm::vec2& rightXZ = glm::vec2(1.0f, 0.0f),
+        const glm::vec2& upXZ = glm::vec2(0.0f, 1.0f)
+    );
     void setPaperMapStrokeModulation(
         bool enabled,
         float roughnessInfluence,
@@ -114,6 +120,8 @@ private:
     unsigned int paperRoughnessTextureID_;
     glm::vec2 paperOriginXZ_;
     glm::vec2 paperSize_;
+    glm::vec2 paperRightXZ_;
+    glm::vec2 paperUpXZ_;
     float paperUvScale_;
     bool paperMapStrokeModulationEnabled_;
     float roughnessInfluence_;

@@ -31,6 +31,8 @@ StrokeRenderer::StrokeRenderer()
       paperRoughnessTextureID_(0),
       paperOriginXZ_(0.0f),
       paperSize_(1.0f, 1.0f),
+      paperRightXZ_(1.0f, 0.0f),
+      paperUpXZ_(0.0f, 1.0f),
       paperUvScale_(1.0f),
       paperMapStrokeModulationEnabled_(true),
       roughnessInfluence_(0.3f),
@@ -212,13 +214,24 @@ void StrokeRenderer::setPaperMaterialTextures(unsigned int normalTextureID, unsi
     paperRoughnessTextureID_ = roughnessTextureID;
 }
 
-void StrokeRenderer::setPaperMapping(const glm::vec2& originXZ, const glm::vec2& size, float uvScale)
+void StrokeRenderer::setPaperMapping(
+    const glm::vec2& originXZ,
+    const glm::vec2& size,
+    float uvScale,
+    const glm::vec2& rightXZ,
+    const glm::vec2& upXZ)
 {
     paperOriginXZ_ = originXZ;
     paperSize_ = glm::vec2(
         std::max(0.001f, size.x),
         std::max(0.001f, size.y)
     );
+    paperRightXZ_ = glm::length(rightXZ) > 1e-5f
+        ? glm::normalize(rightXZ)
+        : glm::vec2(1.0f, 0.0f);
+    paperUpXZ_ = glm::length(upXZ) > 1e-5f
+        ? glm::normalize(upXZ)
+        : glm::vec2(0.0f, 1.0f);
     paperUvScale_ = std::max(0.01f, uvScale);
 }
 
@@ -692,6 +705,8 @@ void StrokeRenderer::renderBrushStamps(const glm::mat4& view, const glm::mat4& p
     glUniform1i(glGetUniformLocation(stampShaderProgram_, "paperRoughnessMap"), 2);
     glUniform2f(glGetUniformLocation(stampShaderProgram_, "paperOriginXZ"), paperOriginXZ_.x, paperOriginXZ_.y);
     glUniform2f(glGetUniformLocation(stampShaderProgram_, "paperSize"), paperSize_.x, paperSize_.y);
+    glUniform2f(glGetUniformLocation(stampShaderProgram_, "paperRightXZ"), paperRightXZ_.x, paperRightXZ_.y);
+    glUniform2f(glGetUniformLocation(stampShaderProgram_, "paperUpXZ"), paperUpXZ_.x, paperUpXZ_.y);
     glUniform1f(glGetUniformLocation(stampShaderProgram_, "paperUvScale"), paperUvScale_);
     glUniform1i(
         glGetUniformLocation(stampShaderProgram_, "enablePaperMapModulation"),

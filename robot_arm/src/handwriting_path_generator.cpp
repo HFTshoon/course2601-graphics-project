@@ -9,6 +9,36 @@
 
 #include "spline_generator.h"
 
+void HandwritingPathGenerator::Options::setTextYawDegrees(float degrees)
+{
+    textYawDegrees = degrees;
+    const float theta = degrees * glm::pi<float>() / 180.0f;
+    paperRight = glm::normalize(glm::vec3(std::cos(theta), 0.0f, std::sin(theta)));
+    paperUp = glm::normalize(glm::vec3(-std::sin(theta), 0.0f, std::cos(theta)));
+    paperNormal = glm::vec3(0.0f, 1.0f, 0.0f);
+}
+
+glm::vec3 HandwritingPathGenerator::Options::toWorld(
+    float localX,
+    float localY,
+    float heightAbovePaper) const
+{
+    glm::vec3 surfaceOrigin = paperOrigin;
+    surfaceOrigin.y = paperY;
+    return surfaceOrigin
+        + scale * localX * paperRight
+        + scale * localY * paperUp
+        + heightAbovePaper * paperNormal;
+}
+
+glm::vec3 HandwritingPathGenerator::Options::waypointPosition(
+    float localX,
+    float localY,
+    bool penDown) const
+{
+    return toWorld(localX, localY, penDown ? 0.0f : liftHeight);
+}
+
 std::vector<Waypoint> HandwritingPathGenerator::generateLowercaseA(const Options& options) const
 {
     std::vector<Waypoint> waypoints;
@@ -52,7 +82,7 @@ std::vector<Waypoint> HandwritingPathGenerator::generateText(
         }
 
         Options glyphOptions = options;
-        glyphOptions.paperOrigin.x = options.paperOrigin.x + cursorX;
+        glyphOptions.paperOrigin = options.paperOrigin + cursorX * options.paperRight;
         appendGlyph(glyphDefinition, glyphOptions, waypoints);
         cursorX += options.scale * glyphDefinition.advance + options.characterSpacing;
     }
@@ -180,13 +210,9 @@ void HandwritingPathGenerator::appendGlyph(
 glm::vec3 HandwritingPathGenerator::localToWorld(
     const glm::vec2& localPoint,
     const Options& options,
-    float worldY)
+    bool penDown)
 {
-    return glm::vec3(
-        options.paperOrigin.x + options.scale * localPoint.x,
-        worldY,
-        options.paperOrigin.z + options.scale * localPoint.y
-    );
+    return options.waypointPosition(localPoint.x, localPoint.y, penDown);
 }
 
 void HandwritingPathGenerator::appendStroke(
@@ -204,7 +230,7 @@ void HandwritingPathGenerator::appendStroke(
     std::vector<glm::vec3> drawControlPoints;
     drawControlPoints.reserve(localPoints.size());
     for (size_t i = 0; i < localPoints.size(); ++i) {
-        drawControlPoints.push_back(localToWorld(localPoints[i], options, options.paperY));
+        drawControlPoints.push_back(localToWorld(localPoints[i], options, true));
     }
 
     std::vector<glm::vec3> drawPoints;

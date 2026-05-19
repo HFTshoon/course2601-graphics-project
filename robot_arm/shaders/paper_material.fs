@@ -10,6 +10,8 @@ uniform sampler2D roughnessMap;
 
 uniform vec2 paperOriginXZ;
 uniform vec2 paperSize;
+uniform vec2 paperRightXZ;
+uniform vec2 paperUpXZ;
 uniform float paperUvScale;
 uniform bool usePaperMapShading;
 uniform bool flipNormalY;
@@ -23,7 +25,11 @@ uniform vec3 lightColor;
 
 vec2 computePaperUV(vec3 worldPosition)
 {
-    vec2 local = (worldPosition.xz - paperOriginXZ) / paperSize + vec2(0.5);
+    vec2 delta = worldPosition.xz - paperOriginXZ;
+    vec2 local = vec2(
+        dot(delta, normalize(paperRightXZ)) / paperSize.x,
+        dot(delta, normalize(paperUpXZ)) / paperSize.y
+    ) + vec2(0.5);
     return local * paperUvScale;
 }
 
@@ -41,8 +47,8 @@ void main()
             tangentNormal.g = -tangentNormal.g;
         }
 
-        vec3 T = vec3(1.0, 0.0, 0.0);
-        vec3 B = vec3(0.0, 0.0, 1.0);
+        vec3 T = normalize(vec3(paperRightXZ.x, 0.0, paperRightXZ.y));
+        vec3 B = normalize(vec3(paperUpXZ.x, 0.0, paperUpXZ.y));
         vec3 N = vec3(0.0, 1.0, 0.0);
         mat3 TBN = mat3(T, B, N);
         worldNormal = normalize(TBN * tangentNormal);

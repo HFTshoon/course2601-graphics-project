@@ -19,6 +19,10 @@ public:
         bool useSpline;
         float characterSpacing;
         float wordSpacing;
+        float textYawDegrees;
+        glm::vec3 paperRight;
+        glm::vec3 paperUp;
+        glm::vec3 paperNormal;
 
         Options()
             : paperOrigin(0.0f),
@@ -28,9 +32,17 @@ public:
               sampleSpacing(0.01f),
               useSpline(true),
               characterSpacing(0.035f),
-              wordSpacing(0.16f)
+              wordSpacing(0.16f),
+              textYawDegrees(90.0f),
+              paperRight(0.0f, 0.0f, 1.0f),
+              paperUp(-1.0f, 0.0f, 0.0f),
+              paperNormal(0.0f, 1.0f, 0.0f)
         {
         }
+
+        void setTextYawDegrees(float degrees);
+        glm::vec3 toWorld(float localX, float localY, float heightAbovePaper) const;
+        glm::vec3 waypointPosition(float localX, float localY, bool penDown) const;
     };
 
     std::vector<Waypoint> generateLowercaseA(const Options& options) const;
@@ -56,7 +68,7 @@ private:
         const Options& options,
         std::vector<Waypoint>& waypoints
     );
-    static glm::vec3 localToWorld(const glm::vec2& localPoint, const Options& options, float worldY);
+    static glm::vec3 localToWorld(const glm::vec2& localPoint, const Options& options, bool penDown);
     static void appendStroke(
         const std::vector<glm::vec2>& localPoints,
         const Options& options,
