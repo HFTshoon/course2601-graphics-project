@@ -136,6 +136,53 @@ Fallback:      robot_arm/assets/brushes/basic_circle.png
 
 `robot_arm/assets/brushes/` 안의 PNG 파일은 Brush Image selector에서 사용할 수 있습니다. 다른 기본 brush를 쓰려면 [pen_preset.cpp](robot_arm/src/pen_preset.cpp)의 `brushTexturePath`를 바꾸면 됩니다. Brush image는 PNG, RGBA, transparent background를 권장합니다. 256x256 또는 512x512 정방형 brush tip이 가장 예측 가능하게 stamp됩니다. `square.png`, `rock.png`, `rakchalk.png`처럼 aspect ratio가 큰 이미지는 paper 위 quad에 찍힐 때 늘어나 보일 수 있습니다.
 
+## Demo Workflow
+
+1. 프로젝트를 빌드합니다.
+
+```bash
+cd /data/Graphics_2026/course2601-graphics-project
+cmake -S robot_arm -B robot_arm/build
+cmake --build robot_arm/build -j
+```
+
+2. build 디렉터리에서 실행합니다.
+
+```bash
+cd robot_arm/build
+./main
+```
+
+3. 메인 ImGui 화면에서 text를 입력합니다. 기본값은 `robot`입니다.
+
+4. `Pen Type`을 선택합니다.
+   - Pencil
+   - Ballpoint Pen
+   - Marker
+
+5. `Paper Type`을 선택합니다.
+   - Smooth Paper
+   - Rough Paper
+   - Recycled Paper
+
+6. `Run`을 누르면 선택한 text, pen, paper로 로봇이 바로 글씨를 쓰기 시작합니다.
+
+7. 다시 시작하려면 `Reset`을 누릅니다. 현재 text, pen, paper 선택은 유지되고 stroke와 trajectory만 초기화됩니다.
+
+Advanced controls는 기본적으로 접힌 패널 아래에 있습니다. 개발/debug가 필요할 때만 열면 됩니다.
+
+- `Advanced Settings`: path mode, spline, brush image, paper material controls, playback controls
+- `Robot / IK Debug`: joint sliders, manual IK target
+- `Debug Visualization`: waypoint, IK, TCP, stroke count 상태
+
+Paper texture 확인이 필요하면 `Advanced Settings`의 `Paper Debug View`를 사용합니다.
+   - `Final shaded paper`
+   - `Albedo only`
+   - `Normal map preview`
+   - `Roughness map preview`
+
+재질 차이를 비교하려면 `Advanced Settings`에서 `Smooth + Ballpoint`, `Rough + Pencil`, `Recycled + Marker` quick compare 버튼을 사용할 수 있습니다.
+
 ## 빌드 파일 정리
 
 빌드 산출물은 `robot_arm/build/` 아래에 생성됩니다. 이 디렉터리는 `.gitignore`에 포함되어 있으므로 새로 생성되는 빌드 파일은 git에 추가되지 않습니다.

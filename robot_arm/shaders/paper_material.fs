@@ -16,6 +16,7 @@ uniform bool flipNormalY;
 uniform float ambientStrength;
 uniform float specularStrength;
 uniform float scalarRoughness;
+uniform int debugMode;
 uniform vec3 viewPos;
 uniform vec3 lightDir;
 uniform vec3 lightColor;
@@ -46,6 +47,23 @@ void main()
         mat3 TBN = mat3(T, B, N);
         worldNormal = normalize(TBN * tangentNormal);
         roughness = clamp(texture(roughnessMap, uv).r, 0.02, 1.0);
+    }
+
+    if (debugMode == 1) {
+        FragColor = vec4(albedo, 1.0);
+        return;
+    }
+    if (debugMode == 2) {
+        vec3 previewNormal = texture(normalMap, uv).rgb;
+        if (flipNormalY) {
+            previewNormal.g = 1.0 - previewNormal.g;
+        }
+        FragColor = vec4(previewNormal, 1.0);
+        return;
+    }
+    if (debugMode == 3) {
+        FragColor = vec4(vec3(texture(roughnessMap, uv).r), 1.0);
+        return;
     }
 
     vec3 L = normalize(-lightDir);

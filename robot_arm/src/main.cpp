@@ -218,15 +218,23 @@ int main()
     float paperThicknessOffset = 0.001f;
     bool lockPaperToFloor = true;
     const glm::vec2 paperPlaneSize(0.75f, 0.55f);
+    glm::vec2 paperCenterXZ(0.0f, 0.0f);
     bool usePaperMapShading = true;
-    float paperUvScale = 1.0f;
+    float paperUvScale = 3.0f;
     bool flipPaperNormalY = false;
     float paperAmbientStrength = 0.35f;
     float paperSpecularStrength = 0.14f;
+    int paperDebugMode = 0;
+    const char* paperDebugModeItems[] = {
+        "Final shaded paper",
+        "Albedo only",
+        "Normal map preview",
+        "Roughness map preview"
+    };
     bool enablePaperMapStrokeModulation = true;
-    float paperRoughnessInfluence = 0.30f;
-    float paperNormalInfluence = 0.15f;
-    float paperNoiseScale = 60.0f;
+    float paperRoughnessInfluence = 0.55f;
+    float paperNormalInfluence = 0.22f;
+    float paperNoiseScale = 90.0f;
 
     // Add entities to scene.
     Scene scene;
@@ -308,6 +316,7 @@ int main()
     glm::vec3 ikTarget = robotKinematics.getToolTipPosition();
     bool enableWaypointPlayback = false;
     const glm::vec3 initialToolTipPosition = robotKinematics.getToolTipPosition();
+    paperCenterXZ = glm::vec2(initialToolTipPosition.x, initialToolTipPosition.z);
     std::vector<Waypoint> testWaypoints;
     testWaypoints.push_back(Waypoint(initialToolTipPosition, false));
     testWaypoints.push_back(Waypoint(initialToolTipPosition + glm::vec3(0.10f, 0.00f, 0.00f), false));
@@ -337,7 +346,8 @@ int main()
     char handwritingTextInput[128] = "abc";
     char hersheyJsonPath[256] = "../assets/paths/example_hershey_text.json";
     char glyphLibraryPath[256] = "../assets/fonts/hershey_futural_glyphs.json";
-    char glyphLibraryTextInput[128] = "hello";
+    char glyphLibraryTextInput[128] = "robot";
+    std::string mainDemoStatus = "Ready.";
     int unsupportedCharacterCount = 0;
     HersheyPathLoader hersheyPathLoader;
     HersheyPathLoader::LoadedPath loadedHersheyPath;
@@ -364,7 +374,7 @@ int main()
     for (size_t presetIndex = 0; presetIndex < penPresets.size(); ++presetIndex) {
         penPresetNames.push_back(penPresets[presetIndex].name.c_str());
     }
-    int selectedPenPreset = penPresets.size() > 1 ? 1 : 0;
+    int selectedPenPreset = penPresets.size() > 2 ? 2 : (penPresets.size() > 1 ? 1 : 0);
     struct BrushAsset {
         std::string fileName;
         std::string texturePath;
@@ -436,6 +446,7 @@ int main()
     if (!penPresets.empty()) {
         applyPenPreset(penPresets[selectedPenPreset], selectedBrushImage);
     }
+    trajectoryTracker.setPlaybackSpeed(0.16f);
     std::vector<PaperPreset> paperPresets = createDefaultPaperPresets();
     std::vector<const char*> paperPresetNames;
     struct PaperTextureBinding {
@@ -585,7 +596,7 @@ int main()
         paperPresetNames.push_back(paperPresets[presetIndex].name.c_str());
         paperTextureBindings.push_back(createPaperTextureBinding(paperPresets[presetIndex]));
     }
-    int selectedPaperPreset = 0;
+    int selectedPaperPreset = paperPresets.size() > 1 ? 1 : 0;
     PaperPreset activePaperPreset = paperPresets.empty() ? PaperPreset() : paperPresets[selectedPaperPreset];
     auto applyPaperInfluence = [&]() {
         const float effectiveOpacityMultiplier =
@@ -632,14 +643,14 @@ int main()
         syncPaperYToFloor();
         paperEntity->modelMatrix =
             glm::translate(glm::vec3(
-                handwritingOptions.paperOrigin.x,
+                paperCenterXZ.x,
                 handwritingOptions.paperY,
-                handwritingOptions.paperOrigin.z
+                paperCenterXZ.y
             ))
             * glm::scale(glm::vec3(0.75f, 1.0f, 0.55f));
         strokeRenderer.setPaperY(handwritingOptions.paperY);
         strokeRenderer.setPaperMapping(
-            glm::vec2(handwritingOptions.paperOrigin.x, handwritingOptions.paperOrigin.z),
+            paperCenterXZ,
             paperPlaneSize,
             paperUvScale
         );
@@ -694,6 +705,80 @@ int main()
         glyphLibraryWaypointCount = 0;
         return false;
     };
+    auto estimateGlyphLibraryTextBounds = [&](const char* text, glm::vec2& boundsMin, glm::vec2& boundsMax) {
+        const float inverseScale = handwritingOptions.scale > 0.0001f ? 1.0f / handwritingOptions.scale : 1.0f;
+        const float characterSpacingLocal = handwritingOptions.characterSpacing * inverseScale;
+        const float wordSpacingLocal = handwritingOptions.wordSpacing * inverseScale;
+        float cursorXLocal = 0.0f;
+        bool hasInk = false;
+        boundsMin = glm::vec2(0.0f);
+        boundsMax = glm::vec2(0.0f);
+
+        for (size_t characterIndex = 0; text[characterIndex] != '\0'; ++characterIndex) {
+            const char c = text[characterIndex];
+            if (c == ' ') {
+                const HersheyGlyph* spaceGlyph = hersheyGlyphLibrary.getGlyph(' ');
+                cursorXLocal += (spaceGlyph ? spaceGlyph->advance : hersheyGlyphLibrary.getDefaultSpaceAdvance()) + wordSpacingLocal;
+                continue;
+            }
+
+            const HersheyGlyph* glyph = hersheyGlyphLibrary.getGlyph(c);
+            if (!glyph) {
+                continue;
+            }
+
+            const glm::vec2 glyphMin(cursorXLocal + glyph->boundsMin.x, glyph->boundsMin.y);
+            const glm::vec2 glyphMax(cursorXLocal + glyph->boundsMax.x, glyph->boundsMax.y);
+            if (!hasInk) {
+                boundsMin = glyphMin;
+                boundsMax = glyphMax;
+                hasInk = true;
+            } else {
+                boundsMin.x = std::min(boundsMin.x, glyphMin.x);
+                boundsMin.y = std::min(boundsMin.y, glyphMin.y);
+                boundsMax.x = std::max(boundsMax.x, glyphMax.x);
+                boundsMax.y = std::max(boundsMax.y, glyphMax.y);
+            }
+            cursorXLocal += glyph->advance + characterSpacingLocal;
+        }
+
+        if (!hasInk) {
+            boundsMin = glm::vec2(0.0f);
+            boundsMax = glm::vec2(1.0f, 0.7f);
+        }
+    };
+    auto placeGlyphTextInsidePaper = [&](bool fitScaleToPaper) {
+        if (!hasLoadedGlyphLibrary) {
+            return;
+        }
+
+        glm::vec2 boundsMin(0.0f);
+        glm::vec2 boundsMax(1.0f, 0.7f);
+        estimateGlyphLibraryTextBounds(glyphLibraryTextInput, boundsMin, boundsMax);
+
+        const float horizontalMargin = 0.06f;
+        const float verticalMargin = 0.05f;
+        const float maxTextWidth = std::max(0.05f, paperPlaneSize.x - horizontalMargin * 2.0f);
+        const float textWidth = std::max(0.001f, (boundsMax.x - boundsMin.x) * handwritingOptions.scale);
+        if (fitScaleToPaper && textWidth > maxTextWidth) {
+            const float scaleFactor = maxTextWidth / textWidth;
+            handwritingOptions.scale = std::max(0.045f, handwritingOptions.scale * scaleFactor);
+            estimateGlyphLibraryTextBounds(glyphLibraryTextInput, boundsMin, boundsMax);
+        }
+
+        const float textHeight = std::max(0.001f, (boundsMax.y - boundsMin.y) * handwritingOptions.scale);
+        const float usableHeight = std::max(0.05f, paperPlaneSize.y - verticalMargin * 2.0f);
+        if (fitScaleToPaper && textHeight > usableHeight) {
+            const float scaleFactor = usableHeight / textHeight;
+            handwritingOptions.scale = std::max(0.045f, handwritingOptions.scale * scaleFactor);
+            estimateGlyphLibraryTextBounds(glyphLibraryTextInput, boundsMin, boundsMax);
+        }
+
+        const float paperLeft = paperCenterXZ.x - paperPlaneSize.x * 0.5f;
+        handwritingOptions.paperOrigin.x = paperLeft + horizontalMargin - boundsMin.x * handwritingOptions.scale;
+        handwritingOptions.paperOrigin.z =
+            paperCenterXZ.y - ((boundsMin.y + boundsMax.y) * 0.5f) * handwritingOptions.scale;
+    };
     auto reloadActivePath = [&]() {
         syncPaperYToFloor();
         if (pathMode == 0) {
@@ -731,6 +816,7 @@ int main()
         } else {
             unsupportedCharacterCount = 0;
             loadedHersheyWaypointCount = 0;
+            placeGlyphTextInsidePaper(true);
             if (!generateGlyphLibraryTextPath() && glyphLibraryLoadError.empty()) {
                 glyphLibraryLoadError = "No Hershey glyph library loaded yet.";
             }
@@ -738,6 +824,130 @@ int main()
         trajectoryTracker.setWaypoints(activeWaypoints);
         trajectoryTracker.reset(robotKinematics.getToolTipPosition());
         enableWaypointPlayback = false;
+    };
+    auto selectPenPresetWithDefaultBrush = [&](int presetIndex) {
+        if (presetIndex < 0 || presetIndex >= static_cast<int>(penPresets.size())) {
+            return;
+        }
+        selectedPenPreset = presetIndex;
+        selectedBrushImage = findBrushAssetIndexForPath(penPresets[selectedPenPreset].brushTexturePath);
+        brushImageOverrideActive = false;
+        applyPenPreset(penPresets[selectedPenPreset], selectedBrushImage);
+    };
+    auto applyMaterialComparePreset = [&](int penIndex, int paperIndex) {
+        selectPenPresetWithDefaultBrush(penIndex);
+        applyPaperPreset(paperIndex);
+    };
+    auto inferPenPresetForBrush = [&](const std::string& brushFileName) {
+        if (brushFileName == "chalk.png" || brushFileName == "rakchalk.png") {
+            return 0;
+        }
+        if (brushFileName == "blob.png" || brushFileName == "square.png" || brushFileName == "rock.png") {
+            return penPresets.size() > 2 ? 2 : 0;
+        }
+        return penPresets.size() > 1 ? 1 : 0;
+    };
+    auto selectBrushImageAsPenType = [&](int brushIndex) {
+        if (brushIndex < 0 || brushIndex >= static_cast<int>(brushAssets.size())) {
+            return;
+        }
+        selectedBrushImage = brushIndex;
+        selectedPenPreset = inferPenPresetForBrush(brushAssets[selectedBrushImage].fileName);
+        brushImageOverrideActive =
+            !penPresets.empty() &&
+            brushAssets[selectedBrushImage].fileName !=
+            brushFileNameFromPath(penPresets[selectedPenPreset].brushTexturePath);
+        if (!penPresets.empty()) {
+            applyPenPreset(penPresets[selectedPenPreset], selectedBrushImage);
+        }
+    };
+    auto resetDemoDefaults = [&]() {
+        pathMode = 4;
+        std::snprintf(glyphLibraryPath, sizeof(glyphLibraryPath), "%s", "../assets/fonts/hershey_futural_glyphs.json");
+        std::snprintf(glyphLibraryTextInput, sizeof(glyphLibraryTextInput), "%s", "robot");
+        handwritingOptions.useSpline = true;
+        handwritingOptions.scale = 0.13f;
+        handwritingOptions.sampleSpacing = 0.01f;
+        handwritingOptions.characterSpacing = 0.035f;
+        handwritingOptions.wordSpacing = 0.16f;
+        handwritingOptions.liftHeight = 0.05f;
+        lockPaperToFloor = true;
+        usePaperMapShading = true;
+        enablePaperMapStrokeModulation = true;
+        paperUvScale = 3.0f;
+        flipPaperNormalY = false;
+        paperAmbientStrength = 0.35f;
+        paperSpecularStrength = 0.14f;
+        paperDebugMode = 0;
+        paperRoughnessInfluence = 0.55f;
+        paperNormalInfluence = 0.22f;
+        paperNoiseScale = 90.0f;
+        strokeRenderer.setRenderMode(StrokeRenderMode::ImageBrushStamp);
+        enableStrokeRendering = true;
+        enableWaypointPlayback = false;
+        trajectoryTracker.pause();
+        trajectoryTracker.setPlaybackSpeed(0.16f);
+        const glm::vec3 toolTipPosition = robotKinematics.getToolTipPosition();
+        paperCenterXZ = glm::vec2(toolTipPosition.x, toolTipPosition.z);
+        updatePaperPlane();
+        applyMaterialComparePreset(
+            penPresets.size() > 2 ? 2 : (penPresets.size() > 1 ? 1 : 0),
+            paperPresets.size() > 1 ? 1 : 0
+        );
+        strokeRenderer.clear();
+        loadGlyphLibraryFromPath();
+        placeGlyphTextInsidePaper(true);
+        reloadActivePath();
+    };
+    auto resetMainDemo = [&]() {
+        trajectoryTracker.pause();
+        trajectoryTracker.reset(robotKinematics.getToolTipPosition());
+        enableWaypointPlayback = false;
+        strokeRenderer.clear();
+        mainDemoStatus = "Reset. Select text, pen, and paper, then press Run.";
+    };
+    auto runMainDemo = [&]() {
+        pathMode = 4;
+        handwritingOptions.useSpline = true;
+        lockPaperToFloor = true;
+        usePaperMapShading = true;
+        enablePaperMapStrokeModulation = true;
+        strokeRenderer.setRenderMode(StrokeRenderMode::ImageBrushStamp);
+        updatePaperPlane();
+
+        if (std::strlen(glyphLibraryTextInput) == 0) {
+            mainDemoStatus = "Empty text input.";
+            return;
+        }
+        if (!penPresets.empty()) {
+            selectPenPresetWithDefaultBrush(selectedPenPreset);
+        }
+        if (!paperPresets.empty()) {
+            applyPaperPreset(selectedPaperPreset);
+        }
+        if (!hasLoadedGlyphLibrary && !loadGlyphLibraryFromPath()) {
+            mainDemoStatus = "Glyph library load failed.";
+            return;
+        }
+        placeGlyphTextInsidePaper(true);
+        if (!generateGlyphLibraryTextPath()) {
+            mainDemoStatus = glyphLibraryLoadError.empty()
+                ? "Failed to generate text path."
+                : glyphLibraryLoadError;
+            return;
+        }
+        if (activeWaypoints.empty()) {
+            mainDemoStatus = "No waypoint generated.";
+            return;
+        }
+
+        trajectoryTracker.setWaypoints(activeWaypoints);
+        trajectoryTracker.reset(robotKinematics.getToolTipPosition());
+        strokeRenderer.clear();
+        enableStrokeRendering = true;
+        enableWaypointPlayback = true;
+        trajectoryTracker.play(robotKinematics.getToolTipPosition());
+        mainDemoStatus = "Running.";
     };
     updatePaperPlane();
     loadGlyphLibraryFromPath();
@@ -852,7 +1062,51 @@ int main()
         ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Once);
         ImGui::SetNextWindowSize(ImVec2(560, 860), ImGuiCond_Once);
         ImGui::Begin("Franka Panda Joint Control");
+        ImGui::Text("Robotic Handwriting Demo");
+        ImGui::InputText("Text Input", glyphLibraryTextInput, sizeof(glyphLibraryTextInput));
+        if (!brushAssets.empty()) {
+            if (ImGui::Combo(
+                    "Pen Type",
+                    &selectedBrushImage,
+                    &brushAssetNames[0],
+                    static_cast<int>(brushAssetNames.size()))) {
+                selectBrushImageAsPenType(selectedBrushImage);
+            }
+        }
+        if (!paperPresets.empty()) {
+            if (ImGui::Combo(
+                    "Paper Type",
+                    &selectedPaperPreset,
+                    &paperPresetNames[0],
+                    static_cast<int>(paperPresetNames.size()))) {
+                applyPaperPreset(selectedPaperPreset);
+            }
+        }
+        if (ImGui::Button("Run")) {
+            runMainDemo();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Reset")) {
+            resetMainDemo();
+        }
+        ImGui::TextWrapped("Status: %s", mainDemoStatus.c_str());
+        if (!glyphLibraryLoadError.empty()) {
+            ImGui::TextWrapped("Text path warning: %s", glyphLibraryLoadError.c_str());
+        }
+        if (!strokeRenderer.isBrushTextureLoaded() ||
+            strokeRenderer.getLoadedBrushTexturePath() != strokeRenderer.getBrushTexturePath()) {
+            ImGui::TextWrapped("Brush texture fallback is active.");
+        }
+        if (selectedPaperPreset >= 0 && selectedPaperPreset < static_cast<int>(paperTextureBindings.size())) {
+            const PaperTextureBinding& binding = paperTextureBindings[selectedPaperPreset];
+            if (!binding.structuredAlbedoExists || binding.usingNormalFallback || binding.usingRoughnessFallback) {
+                ImGui::TextWrapped("Paper texture fallback is active. Open Advanced Settings for details.");
+            }
+        }
+
+        ImGui::Separator();
         bool jointChanged = false;
+        if (ImGui::CollapsingHeader("Robot / IK Debug")) {
         for (int j = 0; j < RobotKinematics::DOF; ++j) {
             char label[32];
             snprintf(label, sizeof(label), "Joint %d [%.2f, %.2f]", j + 1,
@@ -865,7 +1119,7 @@ int main()
         }
         if (ImGui::SliderFloat("Gripper [0.00, 0.04]", &gripperOpening, 0.0f, 0.04f))
             jointChanged = true;
-        if (ImGui::Button("Reset")) {
+        if (ImGui::Button("Reset Robot Pose")) {
             robotKinematics.setJointAngles(initialJointAngles);
             gripperOpening = 0.02f;
             jointChanged = true;
@@ -884,6 +1138,49 @@ int main()
         if (ImGui::Button("Reset Target")) {
             ikTarget = robotKinematics.getToolTipPosition();
         }
+        }
+
+        ImGui::Separator();
+        if (ImGui::CollapsingHeader("Advanced Settings")) {
+        if (ImGui::CollapsingHeader("Demo", ImGuiTreeNodeFlags_DefaultOpen)) {
+            if (ImGui::Button("Reset Full Demo")) {
+                resetDemoDefaults();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Smooth + Ballpoint")) {
+                applyMaterialComparePreset(1, 0);
+                paperUvScale = 2.2f;
+                paperRoughnessInfluence = 0.22f;
+                paperNormalInfluence = 0.08f;
+                paperNoiseScale = 55.0f;
+                usePaperMapShading = true;
+                enablePaperMapStrokeModulation = true;
+                updatePaperPlane();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Rough + Pencil")) {
+                applyMaterialComparePreset(0, 1);
+                paperUvScale = 4.0f;
+                paperRoughnessInfluence = 0.68f;
+                paperNormalInfluence = 0.28f;
+                paperNoiseScale = 120.0f;
+                usePaperMapShading = true;
+                enablePaperMapStrokeModulation = true;
+                updatePaperPlane();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Recycled + Marker")) {
+                applyMaterialComparePreset(2, 2);
+                paperUvScale = 3.2f;
+                paperRoughnessInfluence = 0.48f;
+                paperNormalInfluence = 0.18f;
+                paperNoiseScale = 85.0f;
+                usePaperMapShading = true;
+                enablePaperMapStrokeModulation = true;
+                updatePaperPlane();
+            }
+            ImGui::TextWrapped("Reset Full Demo loads the glyph library path, generates text, clears strokes, and leaves playback paused. Press Play to start.");
+        }
 
         ImGui::Separator();
         if (ImGui::Combo("Path Mode", &pathMode, pathModeItems, 5)) {
@@ -899,7 +1196,7 @@ int main()
             reloadActivePath();
         }
         if (pathMode == 2) {
-            ImGui::InputText("Text Input", handwritingTextInput, sizeof(handwritingTextInput));
+            ImGui::InputText("Fallback Text Input", handwritingTextInput, sizeof(handwritingTextInput));
         }
         if (pathMode == 2 || pathMode == 4) {
             if (ImGui::SliderFloat("Character Spacing", &handwritingOptions.characterSpacing, 0.0f, 0.12f)) {
@@ -950,7 +1247,10 @@ int main()
         if (pathMode == 4) {
             ImGui::InputText("Glyph Library Path", glyphLibraryPath, sizeof(glyphLibraryPath));
             if (ImGui::Button("Load Glyph Library")) {
-                if (loadGlyphLibraryFromPath() && generateGlyphLibraryTextPath()) {
+                if (loadGlyphLibraryFromPath()) {
+                    placeGlyphTextInsidePaper(true);
+                }
+                if (hasLoadedGlyphLibrary && generateGlyphLibraryTextPath()) {
                     trajectoryTracker.setWaypoints(activeWaypoints);
                     trajectoryTracker.reset(robotKinematics.getToolTipPosition());
                     enableWaypointPlayback = false;
@@ -958,6 +1258,7 @@ int main()
             }
             ImGui::InputText("Glyph Library Text", glyphLibraryTextInput, sizeof(glyphLibraryTextInput));
             if (ImGui::Button("Generate Glyph Library Text Path")) {
+                placeGlyphTextInsidePaper(true);
                 if (generateGlyphLibraryTextPath()) {
                     trajectoryTracker.setWaypoints(activeWaypoints);
                     trajectoryTracker.reset(robotKinematics.getToolTipPosition());
@@ -965,19 +1266,7 @@ int main()
                 }
             }
             if (ImGui::Button("Reset Glyph Demo")) {
-                std::snprintf(glyphLibraryPath, sizeof(glyphLibraryPath), "%s", "../assets/fonts/hershey_futural_glyphs.json");
-                std::snprintf(glyphLibraryTextInput, sizeof(glyphLibraryTextInput), "%s", "hello");
-                handwritingOptions.useSpline = true;
-                handwritingOptions.scale = 0.15f;
-                handwritingOptions.sampleSpacing = 0.01f;
-                handwritingOptions.characterSpacing = 0.035f;
-                handwritingOptions.wordSpacing = 0.16f;
-                strokeRenderer.setRenderMode(StrokeRenderMode::ImageBrushStamp);
-                if (loadGlyphLibraryFromPath() && generateGlyphLibraryTextPath()) {
-                    trajectoryTracker.setWaypoints(activeWaypoints);
-                    trajectoryTracker.reset(robotKinematics.getToolTipPosition());
-                    enableWaypointPlayback = false;
-                }
+                resetDemoDefaults();
             }
             ImGui::Text("Loaded Glyph Library Path: %s", loadedGlyphLibraryPath.empty() ? "none" : loadedGlyphLibraryPath.c_str());
             ImGui::Text("Glyph Library Source: %s", hasLoadedGlyphLibrary ? hersheyGlyphLibrary.getSourceName().c_str() : "none");
@@ -1036,18 +1325,18 @@ int main()
         if (ImGui::SliderFloat("Lift Height", &handwritingOptions.liftHeight, 0.01f, 0.15f)) {
             reloadActivePath();
         }
-        if (ImGui::SliderFloat("Paper Origin X", &handwritingOptions.paperOrigin.x, -1.5f, 1.5f)) {
+        if (ImGui::SliderFloat("Paper Center X", &paperCenterXZ.x, -1.5f, 1.5f)) {
             updatePaperPlane();
             reloadActivePath();
         }
-        if (ImGui::SliderFloat("Paper Origin Z", &handwritingOptions.paperOrigin.z, -1.5f, 1.5f)) {
+        if (ImGui::SliderFloat("Paper Center Z", &paperCenterXZ.y, -1.5f, 1.5f)) {
             updatePaperPlane();
             reloadActivePath();
         }
-        if (ImGui::Button("Reset Paper Origin Near Tool Tip")) {
+        if (ImGui::Button("Reset Paper Center Near Tool Tip")) {
             const glm::vec3 toolTipPosition = robotKinematics.getToolTipPosition();
-            handwritingOptions.paperOrigin.x = toolTipPosition.x;
-            handwritingOptions.paperOrigin.z = toolTipPosition.z;
+            paperCenterXZ = glm::vec2(toolTipPosition.x, toolTipPosition.z);
+            placeGlyphTextInsidePaper(true);
             updatePaperPlane();
             reloadActivePath();
         }
@@ -1074,7 +1363,12 @@ int main()
         );
         ImGui::Text("Lift Height: %.4f", handwritingOptions.liftHeight);
         ImGui::Text(
-            "Paper Origin: x %.4f, z %.4f",
+            "Paper Center: x %.4f, z %.4f",
+            paperCenterXZ.x,
+            paperCenterXZ.y
+        );
+        ImGui::Text(
+            "Text Origin: x %.4f, z %.4f",
             handwritingOptions.paperOrigin.x,
             handwritingOptions.paperOrigin.z
         );
@@ -1122,6 +1416,7 @@ int main()
             }
             ImGui::Text("NormalGL Warning: normal.png should be ambientCG NormalGL. NormalDX may flip the green channel.");
             ImGui::Checkbox("Use Paper Normal/Roughness Shading", &usePaperMapShading);
+            ImGui::Combo("Paper Debug View", &paperDebugMode, paperDebugModeItems, 4);
             if (ImGui::SliderFloat("Paper UV Scale", &paperUvScale, 0.25f, 8.0f)) {
                 updatePaperPlane();
             }
@@ -1231,6 +1526,10 @@ int main()
             "Brush Texture Loaded: %s",
             strokeRenderer.isBrushTextureLoaded() ? "true" : "procedural fallback"
         );
+        if (!strokeRenderer.isBrushTextureLoaded() ||
+            strokeRenderer.getLoadedBrushTexturePath() != strokeRenderer.getBrushTexturePath()) {
+            ImGui::TextWrapped("Warning: brush texture is using fallback or procedural texture.");
+        }
         float strokeBrushSize = strokeRenderer.getBrushSize();
         if (ImGui::SliderFloat("Brush Size", &strokeBrushSize, 0.005f, 0.080f)) {
             strokeRenderer.setBrushSize(strokeBrushSize);
@@ -1281,6 +1580,7 @@ int main()
         if (ImGui::SliderFloat("Waypoint Reach Threshold", &waypointThreshold, 0.005f, 0.10f)) {
             trajectoryTracker.setWaypointReachThreshold(waypointThreshold);
         }
+        }
 
         if (enableWaypointPlayback) {
             trajectoryTracker.update(dt, robotKinematics, ikSolver);
@@ -1294,7 +1594,7 @@ int main()
         const glm::vec3 toolTipPosition = robotKinematics.getToolTipPosition();
         const bool currentPenDown = getTrajectoryPenDown();
         strokeRenderer.setPaperMapping(
-            glm::vec2(handwritingOptions.paperOrigin.x, handwritingOptions.paperOrigin.z),
+            paperCenterXZ,
             paperPlaneSize,
             paperUvScale
         );
@@ -1319,6 +1619,7 @@ int main()
             : handwritingOptions.paperY + handwritingOptions.liftHeight;
 
         ImGui::Separator();
+        if (ImGui::CollapsingHeader("Debug Visualization")) {
         ImGui::Text("End Effector Position:");
         ImGui::Text("x: %.4f", endEffectorPosition.x);
         ImGui::Text("y: %.4f", endEffectorPosition.y);
@@ -1385,6 +1686,7 @@ int main()
             "Tool Tip Distance To Waypoint: %.6f",
             trajectoryTracker.getToolTipDistanceToCurrentWaypoint()
         );
+        }
         ImGui::End();
 
         // Tab: toggle between camera mode and ImGui mode
@@ -1524,7 +1826,7 @@ int main()
             paperShader.setVec3("lightColor", sun.lightColor);
             paperShader.setVec2(
                 "paperOriginXZ",
-                glm::vec2(handwritingOptions.paperOrigin.x, handwritingOptions.paperOrigin.z)
+                paperCenterXZ
             );
             paperShader.setVec2("paperSize", paperPlaneSize);
             paperShader.setFloat("paperUvScale", paperUvScale);
@@ -1533,6 +1835,7 @@ int main()
             paperShader.setFloat("ambientStrength", paperAmbientStrength);
             paperShader.setFloat("specularStrength", paperSpecularStrength);
             paperShader.setFloat("scalarRoughness", activePaperPreset.roughness);
+            paperShader.setInt("debugMode", paperDebugMode);
 
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_2D, paperModel.diffuse ? paperModel.diffuse->ID : Model::getFallbackWhiteTextureID());

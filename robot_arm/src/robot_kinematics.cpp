@@ -156,7 +156,7 @@ RobotKinematics::createPandaJointSpecs()
 glm::mat4 RobotKinematics::createPandaBaseWorldTransform()
 {
     glm::mat4 pandaBaseWorld = glm::mat4(1.0f);
-    pandaBaseWorld = glm::translate(pandaBaseWorld, glm::vec3(0.0f, -0.5f, 1.0f));
+    pandaBaseWorld = glm::translate(pandaBaseWorld, glm::vec3(0.0f, 0.0f, 1.0f));
     pandaBaseWorld = glm::rotate(pandaBaseWorld, glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     pandaBaseWorld = glm::scale(pandaBaseWorld, glm::vec3(2.0f));
     return pandaBaseWorld;
